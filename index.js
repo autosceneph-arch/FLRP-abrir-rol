@@ -43,7 +43,10 @@ let state = loadJSON(STATE_FILE, {
   pausedAt: null,
   totalPausedMs: 0,
   allowedRoles: [],          // Roles que pueden usar botones + todos los comandos
-  permanentMessageRole: null // Único rol que puede usar /mensaje-permanente
+  permanentMessageRole: null, // Único rol que puede usar /mensaje-permanente
+  mentionRole: null,         // Rol que se menciona en apertura y cierre
+  vias: null,                // 1 o 2
+  limite: null               // cualquier número
 });
 
 let stats = loadJSON(STATS_FILE, {});
@@ -92,7 +95,7 @@ function getMonthKey(date = new Date()) {
 // Función para verificar si el usuario tiene permiso general (botones + comandos)
 function hasGeneralPermission(member) {
   if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
-  if (state.allowedRoles.length === 0) return true; // Si no hay roles configurados, todos pueden (temporal)
+  if (state.allowedRoles.length === 0) return true;
   return member.roles.cache.some(r => state.allowedRoles.includes(r.id));
 }
 
@@ -121,11 +124,17 @@ function createStatusEmbed() {
     color = 0xFF0000;
   }
 
+  // Vías y Límite
+  let viasDisplay = state.status === 'frp' ? '-' : (state.vias !== null ? state.vias : 'No definido');
+  let limiteDisplay = state.status === 'frp' ? '-' : (state.limite !== null ? state.limite : 'No definido');
+
   const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle('🌸 Estado del Rol ・ Florida States RP')
     .setDescription(`\`\`\`\n${statusText}\n\`\`\``)
     .addFields(
+      { name: '🛣️ Vías', value: `\`${viasDisplay}\``, inline: true },
+      { name: '👥 Límite', value: `\`${limiteDisplay}\``, inline: true },
       { name: '📅 Última actualización', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
     )
     .setFooter({ text: 'Florida States RP • Solo staff autorizado puede cambiar el estado' })
@@ -160,7 +169,10 @@ function createButtons() {
 }
 
 // ====================== MENSAJES AUTOMÁTICOS (se borran en 15 min) ======================
-const APERTURA_MSG = `# 🚨・APERTURA DE ROL
+function getAperturaMsg() {
+  const mention = state.mentionRole ? `<@&${state.mentionRole}>` : '';
+  return `# 🚨・APERTURA DE ROL
+${mention}
 > Al iniciar el rol, **todos deberán tener sus papeles y documentos en regla.** 📄
 🚗・**Licencia**
 🪪・**Identificación**
@@ -168,12 +180,17 @@ const APERTURA_MSG = `# 🚨・APERTURA DE ROL
 📑・**Cualquier otro documento requerido**
 > ⚠️ **Si no cuentan con los documentos correspondientes o incumplen las normas de rol, podrán ser KICKEADOS del servidor sin previo aviso.**
 ### 🔒・¡TODO EN REGLA ANTES DE COMENZAR! 🚨`;
+}
 
-const CIERRE_MSG = `# 🏁・CIERRE DE ROL
+function getCierreMsg() {
+  const mention = state.mentionRole ? `<@&${state.mentionRole}>` : '';
+  return `# 🏁・CIERRE DE ROL
+${mention}
 > ❤️ Gracias a todos por participar en el rol de hoy.
 ⭐ **No olviden calificar a los administradores** que estuvieron apoyando durante el rol en <#1452871884071899217>.
 🙏 Agradecemos muchísimo a todos los **moderadores y administradores** que estuvieron pendientes y apoyando el servidor durante el rol.
 > 💙 ¡Gracias por ser parte de **Florida States RP**!`;
+}
 
 const FRP_MSG = `# ⏸️・FRP-FARMING ACTIVADO
 > 🚨 **SE PAUSÓ / APAGÓ EL ROL** para realizar actividades de **FRP-Farming**.
@@ -250,7 +267,7 @@ async function handleButton(interaction) {
       saveState();
       saveStats();
       await updatePermanentMessage(interaction);
-      await sendTempMessage(interaction.channel, APERTURA_MSG);
+      await sendTempMessage(interaction.channel, getAperturaMsg());
       await confirm('🟢 **Rol activado** correctamente.');
       break;
     }
@@ -297,7 +314,7 @@ async function handleButton(interaction) {
       saveState();
       saveStats();
       await updatePermanentMessage(interaction);
-      await sendTempMessage(interaction.channel, CIERRE_MSG);
+      await sendTempMessage(interaction.channel, getCierreMsg());
       await confirm(`🏁 **Rol cerrado**. Duración de esta sesión: **${formatDuration(duration)}**`);
       break;
     }
@@ -352,7 +369,18 @@ const commands = [
     .setDescription('Configura los roles de permisos del bot')
     .addRoleOption(opt => opt.setName('rol').setDescription('Rol general (botones + comandos) - se añade/quita').setRequired(true))
     .addRoleOption(opt => opt.setName('rol-permanente').setDescription('Rol ÚNICO que puede usar /mensaje-permanente').setRequired(false))
+    .addRoleOption(opt => opt.setName('rol-mencion').setDescription('Rol que se mencionará en los mensajes de apertura y cierre').setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+  new SlashCommandBuilder()
+    .setName('vias')
+    .setDescription('Configura el número de vías (1 o 2)')
+    .addIntegerOption(opt => opt.setName('valor').setDescription('Número de vías (1 o 2)').setRequired(true).setMinValue(1).setMaxValue(2)),
+
+  new SlashCommandBuilder()
+    .setName('limite')
+    .setDescription('Configura el límite de jugadores')
+    .addIntegerOption(opt => opt.setName('valor').setDescription('Límite de jugadores').setRequired(true).setMinValue(1)),
 
   new SlashCommandBuilder()
     .setName('rp-stats')
@@ -451,9 +479,9 @@ client.on('interactionCreate', async (interaction) => {
 
   // ========== /config-roles ==========
   else if (commandName === 'config-roles') {
-    // Solo Administradores pueden usar este comando (ya está en setDefaultMemberPermissions)
     const role = interaction.options.getRole('rol');
     const permanentRole = interaction.options.getRole('rol-permanente');
+    const mentionRole = interaction.options.getRole('rol-mencion');
 
     let response = '';
 
@@ -467,16 +495,62 @@ client.on('interactionCreate', async (interaction) => {
       response += `🗑️ Rol general **${role.name}** eliminado.\n`;
     }
 
-    // Manejar rol permanente (si se proporciona)
+    // Manejar rol permanente
     if (permanentRole) {
       state.permanentMessageRole = permanentRole.id;
-      response += `🔒 Rol para **/mensaje-permanente** configurado como: **${permanentRole.name}**`;
+      response += `🔒 Rol para **/mensaje-permanente** configurado como: **${permanentRole.name}**\n`;
+    }
+
+    // Manejar rol de mención
+    if (mentionRole) {
+      state.mentionRole = mentionRole.id;
+      response += `📢 Rol de mención configurado como: **${mentionRole.name}** (se mencionará en apertura y cierre)`;
     }
 
     saveState();
 
     await interaction.reply({
       content: response || 'No se realizaron cambios.',
+      ephemeral: true
+    });
+  }
+
+  // ========== /vias ==========
+  else if (commandName === 'vias') {
+    if (!hasGeneralPermission(interaction.member)) {
+      return interaction.reply({
+        content: '❌ No tienes permiso para usar este comando.',
+        ephemeral: true
+      });
+    }
+
+    const valor = interaction.options.getInteger('valor');
+    state.vias = valor;
+    saveState();
+    await updatePermanentMessage(interaction);
+
+    await interaction.reply({
+      content: `✅ Vías actualizadas a: **${valor}**`,
+      ephemeral: true
+    });
+  }
+
+  // ========== /limite ==========
+  else if (commandName === 'limite') {
+    if (!hasGeneralPermission(interaction.member)) {
+      return interaction.reply({
+        content: '❌ No tienes permiso para usar este comando.',
+        ephemeral: true
+      });
+    }
+
+    const valor = interaction.options.getInteger('valor');
+    state.limite = valor;
+    saveState();
+    await updatePermanentMessage(interaction);
+
+    await interaction.reply({
+      content: `✅ Límite actualizado a: **${valor}**`,
       ephemeral: true
     });
   }
