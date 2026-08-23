@@ -46,7 +46,8 @@ let state = loadJSON(STATE_FILE, {
   permanentMessageRole: null, // Único rol que puede usar /mensaje-permanente
   mentionRole: null,         // Rol que se menciona en apertura y cierre
   vias: null,                // 1 o 2
-  limite: null               // límite de velocidad
+  limite: null,              // límite de velocidad
+  evento: 'Sin eventos'      // Nombre del evento actual
 });
 
 let stats = loadJSON(STATS_FILE, {});
@@ -135,7 +136,8 @@ function createStatusEmbed() {
     .addFields(
       { name: '🛣️ Vías', value: `\`${viasDisplay}\``, inline: true },
       { name: '🏎️ Límite de Velocidad', value: `\`${limiteDisplay}\``, inline: true },
-      { name: '📅 Última actualización', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
+      { name: '🎉 Evento', value: `\`${state.evento || 'Sin eventos'}\``, inline: true },
+      { name: '📅 Última actualización', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: false }
     )
     .setFooter({ text: 'Florida States RP • Solo staff autorizado puede cambiar el estado' })
     .setTimestamp();
@@ -383,6 +385,15 @@ const commands = [
     .addIntegerOption(opt => opt.setName('valor').setDescription('Límite de velocidad').setRequired(true).setMinValue(1)),
 
   new SlashCommandBuilder()
+    .setName('evento')
+    .setDescription('Activa un evento y lo muestra en el mensaje permanente')
+    .addStringOption(opt => opt.setName('nombre').setDescription('Nombre del evento').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('terminar-evento')
+    .setDescription('Termina el evento actual y lo pone en "Sin eventos"'),
+
+  new SlashCommandBuilder()
     .setName('rp-stats')
     .setDescription('Ver estadísticas de RP de un usuario')
     .addUserOption(opt => opt.setName('usuario').setDescription('Usuario a consultar').setRequired(false)),
@@ -441,6 +452,23 @@ client.once('ready', async () => {
   if (state.channelId && state.messageId) {
     await updatePermanentMessage();
   }
+});
+
+// ====================== AUTO-BORRADO DE MENSAJES (10 minutos) ======================
+client.on('messageCreate', async (message) => {
+  // Ignorar mensajes del propio bot
+  if (message.author.bot) return;
+
+  // Solo actuar en el canal del mensaje permanente
+  if (!state.channelId || message.channel.id !== state.channelId) return;
+
+  // No borrar el mensaje permanente
+  if (message.id === state.messageId) return;
+
+  // Borrar el mensaje después de 10 minutos
+  setTimeout(() => {
+    message.delete().catch(() => {});
+  }, 10 * 60 * 1000);
 });
 
 // ====================== INTERACCIONES ======================
@@ -551,6 +579,45 @@ client.on('interactionCreate', async (interaction) => {
 
     await interaction.reply({
       content: `✅ Límite de velocidad actualizado a: **${valor}**`,
+      ephemeral: true
+    });
+  }
+
+  // ========== /evento ==========
+  else if (commandName === 'evento') {
+    if (!hasGeneralPermission(interaction.member)) {
+      return interaction.reply({
+        content: '❌ No tienes permiso para usar este comando.',
+        ephemeral: true
+      });
+    }
+
+    const nombre = interaction.options.getString('nombre');
+    state.evento = nombre;
+    saveState();
+    await updatePermanentMessage(interaction);
+
+    await interaction.reply({
+      content: `🎉 Evento activado: **${nombre}**`,
+      ephemeral: true
+    });
+  }
+
+  // ========== /terminar-evento ==========
+  else if (commandName === 'terminar-evento') {
+    if (!hasGeneralPermission(interaction.member)) {
+      return interaction.reply({
+        content: '❌ No tienes permiso para usar este comando.',
+        ephemeral: true
+      });
+    }
+
+    state.evento = 'Sin eventos';
+    saveState();
+    await updatePermanentMessage(interaction);
+
+    await interaction.reply({
+      content: `✅ Evento terminado. Ahora muestra: **Sin eventos**`,
       ephemeral: true
     });
   }
