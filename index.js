@@ -46,7 +46,7 @@ let state = loadJSON(STATE_FILE, {
   permanentMessageRole: null, // Único rol que puede usar /mensaje-permanente
   mentionRole: null,         // Rol que se menciona en apertura y cierre
   vias: null,                // 1 o 2
-  limite: null               // cualquier número
+  limite: null               // límite de velocidad
 });
 
 let stats = loadJSON(STATS_FILE, {});
@@ -124,7 +124,7 @@ function createStatusEmbed() {
     color = 0xFF0000;
   }
 
-  // Vías y Límite
+  // Vías y Límite de Velocidad
   let viasDisplay = state.status === 'frp' ? '-' : (state.vias !== null ? state.vias : 'No definido');
   let limiteDisplay = state.status === 'frp' ? '-' : (state.limite !== null ? state.limite : 'No definido');
 
@@ -134,7 +134,7 @@ function createStatusEmbed() {
     .setDescription(`\`\`\`\n${statusText}\n\`\`\``)
     .addFields(
       { name: '🛣️ Vías', value: `\`${viasDisplay}\``, inline: true },
-      { name: '👥 Límite', value: `\`${limiteDisplay}\``, inline: true },
+      { name: '🏎️ Límite de Velocidad', value: `\`${limiteDisplay}\``, inline: true },
       { name: '📅 Última actualización', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true }
     )
     .setFooter({ text: 'Florida States RP • Solo staff autorizado puede cambiar el estado' })
@@ -379,8 +379,8 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('limite')
-    .setDescription('Configura el límite de jugadores')
-    .addIntegerOption(opt => opt.setName('valor').setDescription('Límite de jugadores').setRequired(true).setMinValue(1)),
+    .setDescription('Configura el límite de velocidad')
+    .addIntegerOption(opt => opt.setName('valor').setDescription('Límite de velocidad').setRequired(true).setMinValue(1)),
 
   new SlashCommandBuilder()
     .setName('rp-stats')
@@ -550,7 +550,7 @@ client.on('interactionCreate', async (interaction) => {
     await updatePermanentMessage(interaction);
 
     await interaction.reply({
-      content: `✅ Límite actualizado a: **${valor}**`,
+      content: `✅ Límite de velocidad actualizado a: **${valor}**`,
       ephemeral: true
     });
   }
