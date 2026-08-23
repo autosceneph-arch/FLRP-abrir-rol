@@ -42,7 +42,8 @@ let state = loadJSON(STATE_FILE, {
   startTime: null,
   pausedAt: null,
   totalPausedMs: 0,
-  allowedRoles: []
+  allowedRoles: [],          // Roles que pueden usar botones + todos los comandos
+  permanentMessageRole: null // Único rol que puede usar /mensaje-permanente
 });
 
 let stats = loadJSON(STATS_FILE, {});
@@ -86,6 +87,20 @@ function getWeekKey(date = new Date()) {
 
 function getMonthKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// Función para verificar si el usuario tiene permiso general (botones + comandos)
+function hasGeneralPermission(member) {
+  if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+  if (state.allowedRoles.length === 0) return true; // Si no hay roles configurados, todos pueden (temporal)
+  return member.roles.cache.some(r => state.allowedRoles.includes(r.id));
+}
+
+// Función para verificar si puede usar /mensaje-permanente
+function canUsePermanentMessage(member) {
+  if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+  if (!state.permanentMessageRole) return false;
+  return member.roles.cache.has(state.permanentMessageRole);
 }
 
 // ====================== EMBEDS ROSA ======================
@@ -201,14 +216,12 @@ async function updatePermanentMessage(interaction = null) {
 
 // ====================== LÓGICA DE BOTONES ======================
 async function handleButton(interaction) {
-  if (state.allowedRoles.length > 0) {
-    const hasRole = interaction.member.roles.cache.some(r => state.allowedRoles.includes(r.id));
-    if (!hasRole && !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return interaction.reply({
-        content: '❌ No tienes permiso para usar estos botones.',
-        ephemeral: true
-      });
-    }
+  // Verificar permiso general
+  if (!hasGeneralPermission(interaction.member)) {
+    return interaction.reply({
+      content: '❌ No tienes permiso para usar estos botones.',
+      ephemeral: true
+    });
   }
 
   const userId = interaction.user.id;
@@ -332,13 +345,13 @@ async function handleButton(interaction) {
 const commands = [
   new SlashCommandBuilder()
     .setName('mensaje-permanente')
-    .setDescription('Coloca el mensaje permanente de estado del rol en este canal')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDescription('Coloca el mensaje permanente de estado del rol en este canal'),
 
   new SlashCommandBuilder()
     .setName('config-roles')
-    .setDescription('Configura los roles que pueden usar los botones de estado')
-    .addRoleOption(opt => opt.setName('rol').setDescription('Rol a añadir/quitar').setRequired(true))
+    .setDescription('Configura los roles de permisos del bot')
+    .addRoleOption(opt => opt.setName('rol').setDescription('Rol general (botones + comandos) - se añade/quita').setRequired(true))
+    .addRoleOption(opt => opt.setName('rol-permanente').setDescription('Rol ÚNICO que puede usar /mensaje-permanente').setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   new SlashCommandBuilder()
@@ -412,7 +425,15 @@ client.on('interactionCreate', async (interaction) => {
 
   const { commandName } = interaction;
 
+  // ========== /mensaje-permanente ==========
   if (commandName === 'mensaje-permanente') {
+    if (!canUsePermanentMessage(interaction.member)) {
+      return interaction.reply({
+        content: '❌ Solo el rol configurado como **rol-permanente** (o Administradores) puede usar este comando.',
+        ephemeral: true
+      });
+    }
+
     const msg = await interaction.channel.send({
       embeds: [createStatusEmbed()],
       components: [createButtons()]
@@ -428,27 +449,48 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
+  // ========== /config-roles ==========
   else if (commandName === 'config-roles') {
+    // Solo Administradores pueden usar este comando (ya está en setDefaultMemberPermissions)
     const role = interaction.options.getRole('rol');
-    const idx = state.allowedRoles.indexOf(role.id);
+    const permanentRole = interaction.options.getRole('rol-permanente');
 
+    let response = '';
+
+    // Manejar rol general (añadir/quitar)
+    const idx = state.allowedRoles.indexOf(role.id);
     if (idx === -1) {
       state.allowedRoles.push(role.id);
-      await interaction.reply({
-        content: `✅ Rol **${role.name}** añadido. Ahora puede usar los botones.`,
-        ephemeral: true
-      });
+      response += `✅ Rol general **${role.name}** añadido (puede usar botones y comandos).\n`;
     } else {
       state.allowedRoles.splice(idx, 1);
-      await interaction.reply({
-        content: `🗑️ Rol **${role.name}** eliminado de los permisos.`,
+      response += `🗑️ Rol general **${role.name}** eliminado.\n`;
+    }
+
+    // Manejar rol permanente (si se proporciona)
+    if (permanentRole) {
+      state.permanentMessageRole = permanentRole.id;
+      response += `🔒 Rol para **/mensaje-permanente** configurado como: **${permanentRole.name}**`;
+    }
+
+    saveState();
+
+    await interaction.reply({
+      content: response || 'No se realizaron cambios.',
+      ephemeral: true
+    });
+  }
+
+  // ========== TODOS LOS DEMÁS COMANDOS ==========
+  else {
+    // Verificar permiso general
+    if (!hasGeneralPermission(interaction.member)) {
+      return interaction.reply({
+        content: '❌ No tienes permiso para usar este comando.',
         ephemeral: true
       });
     }
-    saveState();
-  }
 
-  else {
     const target = interaction.options.getUser('usuario') || interaction.user;
     const userStats = getUserStats(target.id);
 
