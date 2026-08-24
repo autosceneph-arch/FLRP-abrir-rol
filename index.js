@@ -47,7 +47,8 @@ let state = loadJSON(STATE_FILE, {
   mentionRole: null,         // Rol que se menciona en apertura y cierre
   vias: null,                // 1 o 2
   limite: null,              // límite de velocidad
-  evento: 'Sin eventos'      // Nombre del evento actual
+  evento: 'Sin eventos',     // Nombre del evento actual
+  codigo: 'No definido'      // Código del servidor
 });
 
 let stats = loadJSON(STATS_FILE, {});
@@ -136,6 +137,7 @@ function createStatusEmbed() {
     .addFields(
       { name: '🛣️ Vías', value: `\`${viasDisplay}\``, inline: true },
       { name: '🏎️ Límite de Velocidad', value: `\`${limiteDisplay}\``, inline: true },
+      { name: '🔑 Código', value: `\`${state.codigo || 'No definido'}\``, inline: true },
       { name: '🎉 Evento', value: `\`${state.evento || 'Sin eventos'}\``, inline: true },
       { name: '📅 Última actualización', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: false }
     )
@@ -385,6 +387,11 @@ const commands = [
     .addIntegerOption(opt => opt.setName('valor').setDescription('Límite de velocidad').setRequired(true).setMinValue(1)),
 
   new SlashCommandBuilder()
+    .setName('codigo')
+    .setDescription('Configura el código del servidor')
+    .addStringOption(opt => opt.setName('codigo').setDescription('Código del servidor').setRequired(true)),
+
+  new SlashCommandBuilder()
     .setName('evento')
     .setDescription('Activa un evento y lo muestra en el mensaje permanente')
     .addStringOption(opt => opt.setName('nombre').setDescription('Nombre del evento').setRequired(true)),
@@ -579,6 +586,26 @@ client.on('interactionCreate', async (interaction) => {
 
     await interaction.reply({
       content: `✅ Límite de velocidad actualizado a: **${valor}**`,
+      ephemeral: true
+    });
+  }
+
+  // ========== /codigo ==========
+  else if (commandName === 'codigo') {
+    if (!hasGeneralPermission(interaction.member)) {
+      return interaction.reply({
+        content: '❌ No tienes permiso para usar este comando.',
+        ephemeral: true
+      });
+    }
+
+    const codigo = interaction.options.getString('codigo');
+    state.codigo = codigo;
+    saveState();
+    await updatePermanentMessage(interaction);
+
+    await interaction.reply({
+      content: `🔑 Código actualizado a: **${codigo}**`,
       ephemeral: true
     });
   }
