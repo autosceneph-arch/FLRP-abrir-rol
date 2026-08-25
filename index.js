@@ -8,9 +8,10 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessageReactions
   ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User]
 });
 
 // ====================== RUTAS DE DATOS ======================
@@ -35,23 +36,28 @@ function saveJSON(file, data) {
 }
 
 let state = loadJSON(STATE_FILE, {
-  status: 'closed',          // closed | active | frp
+  status: 'closed',
   messageId: null,
   channelId: null,
   startedBy: null,
   startTime: null,
   pausedAt: null,
   totalPausedMs: 0,
-  allowedRoles: [],          // Roles que pueden usar botones + todos los comandos
-  permanentMessageRole: null, // Único rol que puede usar /mensaje-permanente
-  mentionRole: null,         // Rol que se menciona en apertura y cierre
-  vias: null,                // 1 o 2
-  limite: null,              // límite de velocidad
-  evento: 'Sin eventos',     // Nombre del evento actual
-  codigo: 'No definido'      // Código del servidor
+  allowedRoles: [],
+  permanentMessageRole: null,
+  mentionRole: null,
+  hostRole: null,
+  vias: null,
+  limite: null,
+  evento: 'Sin eventos',
+  codigo: 'No definido',
+  adelantamiento: null
 });
 
 let stats = loadJSON(STATS_FILE, {});
+
+// Mapa de votaciones activas: messageId -> { required: number, reached: boolean }
+const activeVotes = new Map();
 
 function saveState() { saveJSON(STATE_FILE, state); }
 function saveStats() { saveJSON(STATS_FILE, stats); }
@@ -94,14 +100,12 @@ function getMonthKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-// Función para verificar si el usuario tiene permiso general (botones + comandos)
 function hasGeneralPermission(member) {
   if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
   if (state.allowedRoles.length === 0) return true;
   return member.roles.cache.some(r => state.allowedRoles.includes(r.id));
 }
 
-// Función para verificar si puede usar /mensaje-permanente
 function canUsePermanentMessage(member) {
   if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
   if (!state.permanentMessageRole) return false;
@@ -126,9 +130,16 @@ function createStatusEmbed() {
     color = 0xFF0000;
   }
 
-  // Vías y Límite de Velocidad
   let viasDisplay = state.status === 'frp' ? '-' : (state.vias !== null ? state.vias : 'No definido');
   let limiteDisplay = state.status === 'frp' ? '-' : (state.limite !== null ? state.limite : 'No definido');
+  
+  // Adelantamiento: si es 0 muestra "no"
+  let adelantamientoDisplay = 'No definido';
+  if (state.adelantamiento === 0) {
+    adelantamientoDisplay = 'no';
+  } else if (state.adelantamiento !== null) {
+    adelantamientoDisplay = state.adelantamiento;
+  }
 
   const embed = new EmbedBuilder()
     .setColor(color)
@@ -138,6 +149,7 @@ function createStatusEmbed() {
       { name: '🛣️ Vías', value: `\`${viasDisplay}\``, inline: true },
       { name: '🏎️ Límite de Velocidad', value: `\`${limiteDisplay}\``, inline: true },
       { name: '🔑 Código', value: `\`${state.codigo || 'No definido'}\``, inline: true },
+      { name: '⚡ Adelantamiento', value: `\`${adelantamientoDisplay}\``, inline: true },
       { name: '🎉 Evento', value: `\`${state.evento || 'Sin eventos'}\``, inline: true },
       { name: '📅 Última actualización', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: false }
     )
@@ -172,7 +184,7 @@ function createButtons() {
   );
 }
 
-// ====================== MENSAJES AUTOMÁTICOS (se borran en 15 min) ======================
+// ====================== MENSAJES AUTOMÁTICOS ======================
 function getAperturaMsg() {
   const mention = state.mentionRole ? `<@&${state.mentionRole}>` : '';
   return `# 🚨・APERTURA DE ROL
@@ -237,7 +249,6 @@ async function updatePermanentMessage(interaction = null) {
 
 // ====================== LÓGICA DE BOTONES ======================
 async function handleButton(interaction) {
-  // Verificar permiso general
   if (!hasGeneralPermission(interaction.member)) {
     return interaction.reply({
       content: '❌ No tienes permiso para usar estos botones.',
@@ -374,6 +385,7 @@ const commands = [
     .addRoleOption(opt => opt.setName('rol').setDescription('Rol general (botones + comandos) - se añade/quita').setRequired(true))
     .addRoleOption(opt => opt.setName('rol-permanente').setDescription('Rol ÚNICO que puede usar /mensaje-permanente').setRequired(false))
     .addRoleOption(opt => opt.setName('rol-mencion').setDescription('Rol que se mencionará en los mensajes de apertura y cierre').setRequired(false))
+    .addRoleOption(opt => opt.setName('rol-host').setDescription('Rol Host (se menciona cuando una votación alcanza los votos)').setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   new SlashCommandBuilder()
@@ -392,6 +404,11 @@ const commands = [
     .addStringOption(opt => opt.setName('codigo').setDescription('Código del servidor').setRequired(true)),
 
   new SlashCommandBuilder()
+    .setName('adelantamiento')
+    .setDescription('Configura el adelantamiento (0 = no, o entre 80 y 200)')
+    .addIntegerOption(opt => opt.setName('valor').setDescription('0 = no, o un número entre 80 y 200').setRequired(true).setMinValue(0).setMaxValue(200)),
+
+  new SlashCommandBuilder()
     .setName('evento')
     .setDescription('Activa un evento y lo muestra en el mensaje permanente')
     .addStringOption(opt => opt.setName('nombre').setDescription('Nombre del evento').setRequired(true)),
@@ -399,6 +416,11 @@ const commands = [
   new SlashCommandBuilder()
     .setName('terminar-evento')
     .setDescription('Termina el evento actual y lo pone en "Sin eventos"'),
+
+  new SlashCommandBuilder()
+    .setName('votacion')
+    .setDescription('Inicia una votación para abrir rol')
+    .addIntegerOption(opt => opt.setName('numero').setDescription('Número de votos requeridos').setRequired(true).setMinValue(1)),
 
   new SlashCommandBuilder()
     .setName('rp-stats')
@@ -461,21 +483,54 @@ client.once('ready', async () => {
   }
 });
 
-// ====================== AUTO-BORRADO DE MENSAJES (10 minutos) ======================
+// ====================== AUTO-BORRADO DE MENSAJES (20 minutos) ======================
 client.on('messageCreate', async (message) => {
-  // Ignorar mensajes del propio bot
   if (message.author.bot) return;
-
-  // Solo actuar en el canal del mensaje permanente
   if (!state.channelId || message.channel.id !== state.channelId) return;
-
-  // No borrar el mensaje permanente
   if (message.id === state.messageId) return;
 
-  // Borrar el mensaje después de 10 minutos
+  // Si es una votación activa, no la borramos a los 20 min (tiene su propio timer de 40 min)
+  if (activeVotes.has(message.id)) return;
+
   setTimeout(() => {
     message.delete().catch(() => {});
-  }, 10 * 60 * 1000);
+  }, 20 * 60 * 1000); // 20 minutos
+});
+
+// ====================== DETECCIÓN DE REACCIONES (VOTACIÓN) ======================
+client.on('messageReactionAdd', async (reaction, user) => {
+  if (user.bot) return;
+
+  // Si la reacción es parcial, la fetchamos
+  if (reaction.partial) {
+    try {
+      await reaction.fetch();
+    } catch {
+      return;
+    }
+  }
+
+  const message = reaction.message;
+  if (!activeVotes.has(message.id)) return;
+
+  const voteData = activeVotes.get(message.id);
+  if (voteData.reached) return;
+
+  // Contamos solo la reacción ✅
+  if (reaction.emoji.name !== '✅') return;
+
+  const count = reaction.count;
+
+  if (count >= voteData.required) {
+    voteData.reached = true;
+    activeVotes.set(message.id, voteData);
+
+    const hostMention = state.hostRole ? `<@&${state.hostRole}>` : '@Host';
+
+    await message.channel.send({
+      content: `✅ **¡Votación alcanzada!** ${hostMention} abrirá pronto el rol.`
+    });
+  }
 });
 
 // ====================== INTERACCIONES ======================
@@ -517,10 +572,10 @@ client.on('interactionCreate', async (interaction) => {
     const role = interaction.options.getRole('rol');
     const permanentRole = interaction.options.getRole('rol-permanente');
     const mentionRole = interaction.options.getRole('rol-mencion');
+    const hostRole = interaction.options.getRole('rol-host');
 
     let response = '';
 
-    // Manejar rol general (añadir/quitar)
     const idx = state.allowedRoles.indexOf(role.id);
     if (idx === -1) {
       state.allowedRoles.push(role.id);
@@ -530,16 +585,19 @@ client.on('interactionCreate', async (interaction) => {
       response += `🗑️ Rol general **${role.name}** eliminado.\n`;
     }
 
-    // Manejar rol permanente
     if (permanentRole) {
       state.permanentMessageRole = permanentRole.id;
       response += `🔒 Rol para **/mensaje-permanente** configurado como: **${permanentRole.name}**\n`;
     }
 
-    // Manejar rol de mención
     if (mentionRole) {
       state.mentionRole = mentionRole.id;
-      response += `📢 Rol de mención configurado como: **${mentionRole.name}** (se mencionará en apertura y cierre)`;
+      response += `📢 Rol de mención configurado como: **${mentionRole.name}**\n`;
+    }
+
+    if (hostRole) {
+      state.hostRole = hostRole.id;
+      response += `👑 Rol **Host** configurado como: **${hostRole.name}**`;
     }
 
     saveState();
@@ -553,10 +611,7 @@ client.on('interactionCreate', async (interaction) => {
   // ========== /vias ==========
   else if (commandName === 'vias') {
     if (!hasGeneralPermission(interaction.member)) {
-      return interaction.reply({
-        content: '❌ No tienes permiso para usar este comando.',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
     }
 
     const valor = interaction.options.getInteger('valor');
@@ -564,19 +619,13 @@ client.on('interactionCreate', async (interaction) => {
     saveState();
     await updatePermanentMessage(interaction);
 
-    await interaction.reply({
-      content: `✅ Vías actualizadas a: **${valor}**`,
-      ephemeral: true
-    });
+    await interaction.reply({ content: `✅ Vías actualizadas a: **${valor}**`, ephemeral: true });
   }
 
   // ========== /limite ==========
   else if (commandName === 'limite') {
     if (!hasGeneralPermission(interaction.member)) {
-      return interaction.reply({
-        content: '❌ No tienes permiso para usar este comando.',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
     }
 
     const valor = interaction.options.getInteger('valor');
@@ -584,19 +633,13 @@ client.on('interactionCreate', async (interaction) => {
     saveState();
     await updatePermanentMessage(interaction);
 
-    await interaction.reply({
-      content: `✅ Límite de velocidad actualizado a: **${valor}**`,
-      ephemeral: true
-    });
+    await interaction.reply({ content: `✅ Límite de velocidad actualizado a: **${valor}**`, ephemeral: true });
   }
 
   // ========== /codigo ==========
   else if (commandName === 'codigo') {
     if (!hasGeneralPermission(interaction.member)) {
-      return interaction.reply({
-        content: '❌ No tienes permiso para usar este comando.',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
     }
 
     const codigo = interaction.options.getString('codigo');
@@ -604,19 +647,37 @@ client.on('interactionCreate', async (interaction) => {
     saveState();
     await updatePermanentMessage(interaction);
 
-    await interaction.reply({
-      content: `🔑 Código actualizado a: **${codigo}**`,
-      ephemeral: true
-    });
+    await interaction.reply({ content: `🔑 Código actualizado a: **${codigo}**`, ephemeral: true });
+  }
+
+  // ========== /adelantamiento ==========
+  else if (commandName === 'adelantamiento') {
+    if (!hasGeneralPermission(interaction.member)) {
+      return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
+    }
+
+    const valor = interaction.options.getInteger('valor');
+
+    // Validar: solo 0 o entre 80 y 200
+    if (valor !== 0 && (valor < 80 || valor > 200)) {
+      return interaction.reply({
+        content: '❌ El valor debe ser **0** (no) o un número entre **80 y 200**.',
+        ephemeral: true
+      });
+    }
+
+    state.adelantamiento = valor;
+    saveState();
+    await updatePermanentMessage(interaction);
+
+    const display = valor === 0 ? 'no' : valor;
+    await interaction.reply({ content: `⚡ Adelantamiento actualizado a: **${display}**`, ephemeral: true });
   }
 
   // ========== /evento ==========
   else if (commandName === 'evento') {
     if (!hasGeneralPermission(interaction.member)) {
-      return interaction.reply({
-        content: '❌ No tienes permiso para usar este comando.',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
     }
 
     const nombre = interaction.options.getString('nombre');
@@ -624,39 +685,66 @@ client.on('interactionCreate', async (interaction) => {
     saveState();
     await updatePermanentMessage(interaction);
 
-    await interaction.reply({
-      content: `🎉 Evento activado: **${nombre}**`,
-      ephemeral: true
-    });
+    await interaction.reply({ content: `🎉 Evento activado: **${nombre}**`, ephemeral: true });
   }
 
   // ========== /terminar-evento ==========
   else if (commandName === 'terminar-evento') {
     if (!hasGeneralPermission(interaction.member)) {
-      return interaction.reply({
-        content: '❌ No tienes permiso para usar este comando.',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
     }
 
     state.evento = 'Sin eventos';
     saveState();
     await updatePermanentMessage(interaction);
 
+    await interaction.reply({ content: `✅ Evento terminado. Ahora muestra: **Sin eventos**`, ephemeral: true });
+  }
+
+  // ========== /votacion ==========
+  else if (commandName === 'votacion') {
+    if (!hasGeneralPermission(interaction.member)) {
+      return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
+    }
+
+    const numero = interaction.options.getInteger('numero');
+    const hostMention = state.hostRole ? `<@&${state.hostRole}>` : '';
+
+    const voteContent = `🚦 **Votación Activa** 🚦
+-------------------------------------------------------------------------------
+📍⠇Se Acaba De Iniciar Una Votación Para Empezar Una Sesión De Roleplay
+💳 ⠇Asegúrate De Tener Tus Documentos En Regla Para Evitar Conflictos
+🚗 ⠇Ten Siempre Registrado Tu Vehículo Para Salvarte De Una Multa Costosa
+📚⠇Revisa Nuestras Reglas En ⁠📘⠇normativa-roleplay
+-------------------------------------------------------------------------------
+**Votos requeridos:** \`${numero}\`
+@everyone
+${hostMention ? `|| ${hostMention} ||` : ''}`;
+
+    const voteMsg = await interaction.channel.send({ content: voteContent });
+    
+    // Añadir la reacción ✅ para que la gente vote
+    await voteMsg.react('✅');
+
+    // Guardar como votación activa
+    activeVotes.set(voteMsg.id, { required: numero, reached: false });
+
+    // Borrar el mensaje a los 40 minutos
+    setTimeout(() => {
+      activeVotes.delete(voteMsg.id);
+      voteMsg.delete().catch(() => {});
+    }, 40 * 60 * 1000);
+
     await interaction.reply({
-      content: `✅ Evento terminado. Ahora muestra: **Sin eventos**`,
+      content: `✅ Votación iniciada. Se necesitan **${numero}** reacciones ✅`,
       ephemeral: true
     });
   }
 
-  // ========== TODOS LOS DEMÁS COMANDOS ==========
+  // ========== STATS Y LEADERBOARDS ==========
   else {
-    // Verificar permiso general
     if (!hasGeneralPermission(interaction.member)) {
-      return interaction.reply({
-        content: '❌ No tienes permiso para usar este comando.',
-        ephemeral: true
-      });
+      return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
     }
 
     const target = interaction.options.getUser('usuario') || interaction.user;
