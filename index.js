@@ -56,7 +56,6 @@ let state = loadJSON(STATE_FILE, {
 
 let stats = loadJSON(STATS_FILE, {});
 
-// Mapa de votaciones activas: messageId -> { required: number, reached: boolean }
 const activeVotes = new Map();
 
 function saveState() { saveJSON(STATE_FILE, state); }
@@ -77,6 +76,8 @@ function getUserStats(userId) {
   }
   if (Array.isArray(stats[userId].activeDays)) {
     stats[userId].activeDays = new Set(stats[userId].activeDays);
+  } else if (!(stats[userId].activeDays instanceof Set)) {
+    stats[userId].activeDays = new Set();
   }
   return stats[userId];
 }
@@ -112,6 +113,113 @@ function canUsePermanentMessage(member) {
   return member.roles.cache.has(state.permanentMessageRole);
 }
 
+// ====================== SEED DE ESTADÍSTICAS ======================
+function seedInitialStats() {
+  const weekKey = getWeekKey();
+  const monthKey = getMonthKey();
+
+  const SEED = {
+    // Cesar (ivars1302) → 7h 6m
+    '1229532731579564186': {
+      totalHours: 25560000,
+      rpsOpened: 1,
+      rpsFinished: 1,
+      sessions: [],
+      activeDays: [],
+      weekly: { [weekKey]: 25560000 },
+      monthly: { [monthKey]: 25560000 }
+    },
+    // Martin → 2h 12m
+    '1381812641806422118': {
+      totalHours: 7920000,
+      rpsOpened: 1,
+      rpsFinished: 1,
+      sessions: [],
+      activeDays: [],
+      weekly: { [weekKey]: 7920000 },
+      monthly: { [monthKey]: 7920000 }
+    },
+    // Coker → 1h 45m
+    '1258893833387774024': {
+      totalHours: 6300000,
+      rpsOpened: 1,
+      rpsFinished: 1,
+      sessions: [],
+      activeDays: [],
+      weekly: { [weekKey]: 6300000 },
+      monthly: { [monthKey]: 6300000 }
+    },
+    // Lufgh → 1h 38m
+    '1075197011999084564': {
+      totalHours: 5880000,
+      rpsOpened: 1,
+      rpsFinished: 1,
+      sessions: [],
+      activeDays: [],
+      weekly: { [weekKey]: 5880000 },
+      monthly: { [monthKey]: 5880000 }
+    },
+    // Lauta → 1h 33m
+    '1460163729554538506': {
+      totalHours: 5580000,
+      rpsOpened: 1,
+      rpsFinished: 1,
+      sessions: [],
+      activeDays: [],
+      weekly: { [weekKey]: 5580000 },
+      monthly: { [monthKey]: 5580000 }
+    },
+    // user5343 → 0h 46m
+    '1237923290815922308': {
+      totalHours: 2760000,
+      rpsOpened: 1,
+      rpsFinished: 1,
+      sessions: [],
+      activeDays: [],
+      weekly: { [weekKey]: 2760000 },
+      monthly: { [monthKey]: 2760000 }
+    },
+    // Moro → 0h 36m
+    '1375497158987616458': {
+      totalHours: 2160000,
+      rpsOpened: 1,
+      rpsFinished: 1,
+      sessions: [],
+      activeDays: [],
+      weekly: { [weekKey]: 2160000 },
+      monthly: { [monthKey]: 2160000 }
+    }
+  };
+
+  let changed = false;
+  for (const [userId, data] of Object.entries(SEED)) {
+    if (!stats[userId]) {
+      stats[userId] = data;
+      changed = true;
+    } else {
+      if ((stats[userId].totalHours || 0) < data.totalHours) {
+        stats[userId].totalHours = data.totalHours;
+        changed = true;
+      }
+      if (!stats[userId].weekly) stats[userId].weekly = {};
+      if (!stats[userId].monthly) stats[userId].monthly = {};
+      if ((stats[userId].weekly[weekKey] || 0) < data.weekly[weekKey]) {
+        stats[userId].weekly[weekKey] = data.weekly[weekKey];
+        changed = true;
+      }
+      if ((stats[userId].monthly[monthKey] || 0) < data.monthly[monthKey]) {
+        stats[userId].monthly[monthKey] = data.monthly[monthKey];
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    saveStats();
+    console.log('✅ Estadísticas iniciales cargadas / fusionadas');
+  }
+}
+
 // ====================== EMBEDS ROSA ======================
 const PINK = 0xFF69B4;
 
@@ -132,13 +240,18 @@ function createStatusEmbed() {
 
   let viasDisplay = state.status === 'frp' ? '-' : (state.vias !== null ? state.vias : 'No definido');
   let limiteDisplay = state.status === 'frp' ? '-' : (state.limite !== null ? state.limite : 'No definido');
-  
-  // Adelantamiento: si es 0 muestra "no"
+
   let adelantamientoDisplay = 'No definido';
   if (state.adelantamiento === 0) {
     adelantamientoDisplay = 'no';
   } else if (state.adelantamiento !== null) {
     adelantamientoDisplay = state.adelantamiento;
+  }
+
+  // Host solo se muestra cuando el rol está activo
+  let hostDisplay = '-';
+  if (state.status === 'active' && state.startedBy) {
+    hostDisplay = `<@${state.startedBy}>`;
   }
 
   const embed = new EmbedBuilder()
@@ -151,6 +264,7 @@ function createStatusEmbed() {
       { name: '🔑 Código', value: `\`${state.codigo || 'No definido'}\``, inline: true },
       { name: '⚡ Adelantamiento', value: `\`${adelantamientoDisplay}\``, inline: true },
       { name: '🎉 Evento', value: `\`${state.evento || 'Sin eventos'}\``, inline: true },
+      { name: '👑 Host', value: hostDisplay, inline: true },
       { name: '📅 Última actualización', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: false }
     )
     .setFooter({ text: 'Florida States RP • Solo staff autorizado puede cambiar el estado' })
@@ -467,6 +581,8 @@ const commands = [
 client.once('ready', async () => {
   console.log(`🌸 Bot listo como ${client.user.tag}`);
 
+  seedInitialStats();
+
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
   try {
     await rest.put(
@@ -488,20 +604,17 @@ client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   if (!state.channelId || message.channel.id !== state.channelId) return;
   if (message.id === state.messageId) return;
-
-  // Si es una votación activa, no la borramos a los 20 min (tiene su propio timer de 40 min)
   if (activeVotes.has(message.id)) return;
 
   setTimeout(() => {
     message.delete().catch(() => {});
-  }, 20 * 60 * 1000); // 20 minutos
+  }, 20 * 60 * 1000);
 });
 
 // ====================== DETECCIÓN DE REACCIONES (VOTACIÓN) ======================
 client.on('messageReactionAdd', async (reaction, user) => {
   if (user.bot) return;
 
-  // Si la reacción es parcial, la fetchamos
   if (reaction.partial) {
     try {
       await reaction.fetch();
@@ -516,7 +629,6 @@ client.on('messageReactionAdd', async (reaction, user) => {
   const voteData = activeVotes.get(message.id);
   if (voteData.reached) return;
 
-  // Contamos solo la reacción ✅
   if (reaction.emoji.name !== '✅') return;
 
   const count = reaction.count;
@@ -543,7 +655,6 @@ client.on('interactionCreate', async (interaction) => {
 
   const { commandName } = interaction;
 
-  // ========== /mensaje-permanente ==========
   if (commandName === 'mensaje-permanente') {
     if (!canUsePermanentMessage(interaction.member)) {
       return interaction.reply({
@@ -567,7 +678,6 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
-  // ========== /config-roles ==========
   else if (commandName === 'config-roles') {
     const role = interaction.options.getRole('rol');
     const permanentRole = interaction.options.getRole('rol-permanente');
@@ -608,7 +718,6 @@ client.on('interactionCreate', async (interaction) => {
     });
   }
 
-  // ========== /vias ==========
   else if (commandName === 'vias') {
     if (!hasGeneralPermission(interaction.member)) {
       return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
@@ -622,7 +731,6 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply({ content: `✅ Vías actualizadas a: **${valor}**`, ephemeral: true });
   }
 
-  // ========== /limite ==========
   else if (commandName === 'limite') {
     if (!hasGeneralPermission(interaction.member)) {
       return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
@@ -636,7 +744,6 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply({ content: `✅ Límite de velocidad actualizado a: **${valor}**`, ephemeral: true });
   }
 
-  // ========== /codigo ==========
   else if (commandName === 'codigo') {
     if (!hasGeneralPermission(interaction.member)) {
       return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
@@ -650,7 +757,6 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply({ content: `🔑 Código actualizado a: **${codigo}**`, ephemeral: true });
   }
 
-  // ========== /adelantamiento ==========
   else if (commandName === 'adelantamiento') {
     if (!hasGeneralPermission(interaction.member)) {
       return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
@@ -658,7 +764,6 @@ client.on('interactionCreate', async (interaction) => {
 
     const valor = interaction.options.getInteger('valor');
 
-    // Validar: solo 0 o entre 80 y 200
     if (valor !== 0 && (valor < 80 || valor > 200)) {
       return interaction.reply({
         content: '❌ El valor debe ser **0** (no) o un número entre **80 y 200**.',
@@ -674,7 +779,6 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply({ content: `⚡ Adelantamiento actualizado a: **${display}**`, ephemeral: true });
   }
 
-  // ========== /evento ==========
   else if (commandName === 'evento') {
     if (!hasGeneralPermission(interaction.member)) {
       return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
@@ -688,7 +792,6 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply({ content: `🎉 Evento activado: **${nombre}**`, ephemeral: true });
   }
 
-  // ========== /terminar-evento ==========
   else if (commandName === 'terminar-evento') {
     if (!hasGeneralPermission(interaction.member)) {
       return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
@@ -701,7 +804,6 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply({ content: `✅ Evento terminado. Ahora muestra: **Sin eventos**`, ephemeral: true });
   }
 
-  // ========== /votacion ==========
   else if (commandName === 'votacion') {
     if (!hasGeneralPermission(interaction.member)) {
       return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
@@ -709,6 +811,7 @@ client.on('interactionCreate', async (interaction) => {
 
     const numero = interaction.options.getInteger('numero');
     const hostMention = state.hostRole ? `<@&${state.hostRole}>` : '';
+    const iniciador = `<@${interaction.user.id}>`;
 
     const voteContent = `🚦 **Votación Activa** 🚦
 -------------------------------------------------------------------------------
@@ -718,18 +821,15 @@ client.on('interactionCreate', async (interaction) => {
 📚⠇Revisa Nuestras Reglas En ⁠📘⠇normativa-roleplay
 -------------------------------------------------------------------------------
 **Votos requeridos:** \`${numero}\`
+**Votación iniciada por:** ${iniciador}
 @everyone
 ${hostMention ? `|| ${hostMention} ||` : ''}`;
 
     const voteMsg = await interaction.channel.send({ content: voteContent });
-    
-    // Añadir la reacción ✅ para que la gente vote
     await voteMsg.react('✅');
 
-    // Guardar como votación activa
     activeVotes.set(voteMsg.id, { required: numero, reached: false });
 
-    // Borrar el mensaje a los 40 minutos
     setTimeout(() => {
       activeVotes.delete(voteMsg.id);
       voteMsg.delete().catch(() => {});
@@ -741,7 +841,6 @@ ${hostMention ? `|| ${hostMention} ||` : ''}`;
     });
   }
 
-  // ========== STATS Y LEADERBOARDS ==========
   else {
     if (!hasGeneralPermission(interaction.member)) {
       return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
