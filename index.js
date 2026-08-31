@@ -46,12 +46,12 @@ let state = loadJSON(STATE_FILE, {
   allowedRoles: [],
   permanentMessageRole: null,
   mentionRole: null,
-  hostRole: null,
   vias: null,
   limite: null,
   evento: 'Sin eventos',
   codigo: 'No definido',
-  adelantamiento: null
+  adelantamiento: null,
+  carteles: 'inactivos'
 });
 
 let stats = loadJSON(STATS_FILE, {});
@@ -113,110 +113,209 @@ function canUsePermanentMessage(member) {
   return member.roles.cache.has(state.permanentMessageRole);
 }
 
-// ====================== SEED DE ESTADÍSTICAS ======================
+function makeDays(n) {
+  const arr = [];
+  for (let i = 0; i < n; i++) {
+    arr.push(`2026-08-${String(20 + i).padStart(2, '0')}`);
+  }
+  return arr;
+}
+
+// ====================== SEED DE ESTADÍSTICAS (v2.0.0) ======================
 function seedInitialStats() {
   const weekKey = getWeekKey();
   const monthKey = getMonthKey();
 
   const SEED = {
-    // Cesar (ivars1302) → 7h 6m
-    '1229532731579564186': {
-      totalHours: 25560000,
-      rpsOpened: 1,
-      rpsFinished: 1,
-      sessions: [],
-      activeDays: [],
-      weekly: { [weekKey]: 25560000 },
-      monthly: { [monthKey]: 25560000 }
-    },
-    // Martin → 2h 12m
-    '1381812641806422118': {
-      totalHours: 7920000,
-      rpsOpened: 1,
-      rpsFinished: 1,
-      sessions: [],
-      activeDays: [],
-      weekly: { [weekKey]: 7920000 },
-      monthly: { [monthKey]: 7920000 }
-    },
-    // Coker → 1h 45m
-    '1258893833387774024': {
-      totalHours: 6300000,
-      rpsOpened: 1,
-      rpsFinished: 1,
-      sessions: [],
-      activeDays: [],
-      weekly: { [weekKey]: 6300000 },
-      monthly: { [monthKey]: 6300000 }
-    },
-    // Lufgh → 1h 38m
-    '1075197011999084564': {
-      totalHours: 5880000,
-      rpsOpened: 1,
-      rpsFinished: 1,
-      sessions: [],
-      activeDays: [],
-      weekly: { [weekKey]: 5880000 },
-      monthly: { [monthKey]: 5880000 }
-    },
-    // Lauta → 1h 33m
+    // Lauta
     '1460163729554538506': {
-      totalHours: 5580000,
-      rpsOpened: 1,
-      rpsFinished: 1,
+      totalHours: 45660000,
+      rpsOpened: 6,
+      rpsFinished: 6,
       sessions: [],
-      activeDays: [],
-      weekly: { [weekKey]: 5580000 },
-      monthly: { [monthKey]: 5580000 }
+      activeDays: makeDays(4),
+      weekly: { [weekKey]: 6900000 },
+      monthly: { [monthKey]: 45660000 }
     },
-    // user5343 → 0h 46m
-    '1237923290815922308': {
-      totalHours: 2760000,
-      rpsOpened: 1,
-      rpsFinished: 1,
+    // Vars (Cesar)
+    '1229532731579564186': {
+      totalHours: 36000000,
+      rpsOpened: 3,
+      rpsFinished: 3,
       sessions: [],
-      activeDays: [],
-      weekly: { [weekKey]: 2760000 },
-      monthly: { [monthKey]: 2760000 }
+      activeDays: makeDays(2),
+      weekly: {},
+      monthly: { [monthKey]: 36000000 }
     },
-    // Moro → 0h 36m
+    // Chini
+    '1248999794417078349': {
+      totalHours: 27360000,
+      rpsOpened: 2,
+      rpsFinished: 2,
+      sessions: [],
+      activeDays: makeDays(1),
+      weekly: {},
+      monthly: { [monthKey]: 27360000 }
+    },
+    // Moro
     '1375497158987616458': {
-      totalHours: 2160000,
+      totalHours: 18240000,
+      rpsOpened: 3,
+      rpsFinished: 3,
+      sessions: [],
+      activeDays: makeDays(2),
+      weekly: {},
+      monthly: { [monthKey]: 18240000 }
+    },
+    // Victor
+    '1463269821394321449': {
+      totalHours: 18180000,
+      rpsOpened: 2,
+      rpsFinished: 2,
+      sessions: [],
+      activeDays: makeDays(1),
+      weekly: {},
+      monthly: { [monthKey]: 18180000 }
+    },
+    // Maty
+    '393840505768902656': {
+      totalHours: 15240000,
+      rpsOpened: 2,
+      rpsFinished: 2,
+      sessions: [],
+      activeDays: makeDays(2),
+      weekly: {},
+      monthly: { [monthKey]: 15240000 }
+    },
+    // Martin
+    '1381812641806422118': {
+      totalHours: 14400000,
+      rpsOpened: 2,
+      rpsFinished: 2,
+      sessions: [],
+      activeDays: makeDays(1),
+      weekly: {},
+      monthly: { [monthKey]: 14400000 }
+    },
+    // Coker
+    '1258893833387774024': {
+      totalHours: 10560000,
+      rpsOpened: 2,
+      rpsFinished: 2,
+      sessions: [],
+      activeDays: makeDays(1),
+      weekly: {},
+      monthly: { [monthKey]: 10560000 }
+    },
+    // Juanes
+    '889615324973002803': {
+      totalHours: 7740000,
+      rpsOpened: 2,
+      rpsFinished: 2,
+      sessions: [],
+      activeDays: makeDays(1),
+      weekly: {},
+      monthly: { [monthKey]: 7740000 }
+    },
+    // Adrian
+    '926167544618946670': {
+      totalHours: 5940000,
       rpsOpened: 1,
       rpsFinished: 1,
       sessions: [],
-      activeDays: [],
-      weekly: { [weekKey]: 2160000 },
-      monthly: { [monthKey]: 2160000 }
+      activeDays: makeDays(1),
+      weekly: { [weekKey]: 5940000 },
+      monthly: { [monthKey]: 5940000 }
+    },
+    // Desconocido 1237923290815922308
+    '1237923290815922308': {
+      totalHours: 0,
+      rpsOpened: 2,
+      rpsFinished: 0,
+      sessions: [],
+      activeDays: makeDays(1),
+      weekly: {},
+      monthly: {}
+    },
+    // Desconocido 1542419456762839052
+    '1542419456762839052': {
+      totalHours: 0,
+      rpsOpened: 1,
+      rpsFinished: 0,
+      sessions: [],
+      activeDays: makeDays(1),
+      weekly: {},
+      monthly: {}
+    },
+    // Desconocido 1144461132141166594
+    '1144461132141166594': {
+      totalHours: 0,
+      rpsOpened: 1,
+      rpsFinished: 0,
+      sessions: [],
+      activeDays: makeDays(1),
+      weekly: {},
+      monthly: {}
+    },
+    // Desconocido 1243935410749440043
+    '1243935410749440043': {
+      totalHours: 0,
+      rpsOpened: 2,
+      rpsFinished: 0,
+      sessions: [],
+      activeDays: makeDays(1),
+      weekly: {},
+      monthly: {}
     }
   };
 
   let changed = false;
   for (const [userId, data] of Object.entries(SEED)) {
     if (!stats[userId]) {
-      stats[userId] = data;
+      stats[userId] = { ...data };
       changed = true;
     } else {
-      if ((stats[userId].totalHours || 0) < data.totalHours) {
-        stats[userId].totalHours = data.totalHours;
+      const s = stats[userId];
+      if ((s.totalHours || 0) < data.totalHours) {
+        s.totalHours = data.totalHours;
         changed = true;
       }
-      if (!stats[userId].weekly) stats[userId].weekly = {};
-      if (!stats[userId].monthly) stats[userId].monthly = {};
-      if ((stats[userId].weekly[weekKey] || 0) < data.weekly[weekKey]) {
-        stats[userId].weekly[weekKey] = data.weekly[weekKey];
+      if ((s.rpsOpened || 0) < data.rpsOpened) {
+        s.rpsOpened = data.rpsOpened;
         changed = true;
       }
-      if ((stats[userId].monthly[monthKey] || 0) < data.monthly[monthKey]) {
-        stats[userId].monthly[monthKey] = data.monthly[monthKey];
+      if ((s.rpsFinished || 0) < data.rpsFinished) {
+        s.rpsFinished = data.rpsFinished;
         changed = true;
+      }
+
+      const currentDays = Array.isArray(s.activeDays) ? s.activeDays.length : (s.activeDays?.size || 0);
+      if (currentDays < data.activeDays.length) {
+        s.activeDays = data.activeDays;
+        changed = true;
+      }
+
+      if (!s.weekly) s.weekly = {};
+      if (!s.monthly) s.monthly = {};
+
+      for (const [k, v] of Object.entries(data.weekly || {})) {
+        if ((s.weekly[k] || 0) < v) {
+          s.weekly[k] = v;
+          changed = true;
+        }
+      }
+      for (const [k, v] of Object.entries(data.monthly || {})) {
+        if ((s.monthly[k] || 0) < v) {
+          s.monthly[k] = v;
+          changed = true;
+        }
       }
     }
   }
 
   if (changed) {
     saveStats();
-    console.log('✅ Estadísticas iniciales cargadas / fusionadas');
+    console.log('✅ Estadísticas v2.0.0 cargadas / fusionadas');
   }
 }
 
@@ -248,7 +347,6 @@ function createStatusEmbed() {
     adelantamientoDisplay = state.adelantamiento;
   }
 
-  // Host solo se muestra cuando el rol está activo
   let hostDisplay = '-';
   if (state.status === 'active' && state.startedBy) {
     hostDisplay = `<@${state.startedBy}>`;
@@ -263,11 +361,12 @@ function createStatusEmbed() {
       { name: '🏎️ Límite de Velocidad', value: `\`${limiteDisplay}\``, inline: true },
       { name: '🔑 Código', value: `\`${state.codigo || 'No definido'}\``, inline: true },
       { name: '⚡ Adelantamiento', value: `\`${adelantamientoDisplay}\``, inline: true },
+      { name: '🏴 Carteles', value: `\`${state.carteles || 'inactivos'}\``, inline: true },
       { name: '🎉 Evento', value: `\`${state.evento || 'Sin eventos'}\``, inline: true },
       { name: '👑 Host', value: hostDisplay, inline: true },
       { name: '📅 Última actualización', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: false }
     )
-    .setFooter({ text: 'Florida States RP • Solo staff autorizado puede cambiar el estado' })
+    .setFooter({ text: 'Florida States RP • v2.0.0' })
     .setTimestamp();
 
   return embed;
@@ -499,7 +598,6 @@ const commands = [
     .addRoleOption(opt => opt.setName('rol').setDescription('Rol general (botones + comandos) - se añade/quita').setRequired(true))
     .addRoleOption(opt => opt.setName('rol-permanente').setDescription('Rol ÚNICO que puede usar /mensaje-permanente').setRequired(false))
     .addRoleOption(opt => opt.setName('rol-mencion').setDescription('Rol que se mencionará en los mensajes de apertura y cierre').setRequired(false))
-    .addRoleOption(opt => opt.setName('rol-host').setDescription('Rol Host (se menciona cuando una votación alcanza los votos)').setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   new SlashCommandBuilder()
@@ -521,6 +619,19 @@ const commands = [
     .setName('adelantamiento')
     .setDescription('Configura el adelantamiento (0 = no, o entre 80 y 200)')
     .addIntegerOption(opt => opt.setName('valor').setDescription('0 = no, o un número entre 80 y 200').setRequired(true).setMinValue(0).setMaxValue(200)),
+
+  new SlashCommandBuilder()
+    .setName('carteles')
+    .setDescription('Configura el estado de los carteles')
+    .addStringOption(opt =>
+      opt.setName('estado')
+        .setDescription('Estado de los carteles')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Activos', value: 'activos' },
+          { name: 'Inactivos', value: 'inactivos' }
+        )
+    ),
 
   new SlashCommandBuilder()
     .setName('evento')
@@ -579,7 +690,7 @@ const commands = [
 
 // ====================== REGISTRO DE COMANDOS ======================
 client.once('ready', async () => {
-  console.log(`🌸 Bot listo como ${client.user.tag}`);
+  console.log(`🌸 Bot listo como ${client.user.tag} | v2.0.0`);
 
   seedInitialStats();
 
@@ -637,10 +748,10 @@ client.on('messageReactionAdd', async (reaction, user) => {
     voteData.reached = true;
     activeVotes.set(message.id, voteData);
 
-    const hostMention = state.hostRole ? `<@&${state.hostRole}>` : '@Host';
+    const iniciador = voteData.startedBy ? `<@${voteData.startedBy}>` : 'el host';
 
     await message.channel.send({
-      content: `✅ **¡Votación alcanzada!** ${hostMention} abrirá pronto el rol.`
+      content: `✅ **¡Votación alcanzada!** ${iniciador} abrirá pronto el rol.`
     });
   }
 });
@@ -682,7 +793,6 @@ client.on('interactionCreate', async (interaction) => {
     const role = interaction.options.getRole('rol');
     const permanentRole = interaction.options.getRole('rol-permanente');
     const mentionRole = interaction.options.getRole('rol-mencion');
-    const hostRole = interaction.options.getRole('rol-host');
 
     let response = '';
 
@@ -702,12 +812,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (mentionRole) {
       state.mentionRole = mentionRole.id;
-      response += `📢 Rol de mención configurado como: **${mentionRole.name}**\n`;
-    }
-
-    if (hostRole) {
-      state.hostRole = hostRole.id;
-      response += `👑 Rol **Host** configurado como: **${hostRole.name}**`;
+      response += `📢 Rol de mención configurado como: **${mentionRole.name}**`;
     }
 
     saveState();
@@ -779,6 +884,22 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply({ content: `⚡ Adelantamiento actualizado a: **${display}**`, ephemeral: true });
   }
 
+  else if (commandName === 'carteles') {
+    if (!hasGeneralPermission(interaction.member)) {
+      return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
+    }
+
+    const estado = interaction.options.getString('estado');
+    state.carteles = estado;
+    saveState();
+    await updatePermanentMessage(interaction);
+
+    await interaction.reply({
+      content: `🏴 Carteles actualizados a: **${estado}**`,
+      ephemeral: true
+    });
+  }
+
   else if (commandName === 'evento') {
     if (!hasGeneralPermission(interaction.member)) {
       return interaction.reply({ content: '❌ No tienes permiso para usar este comando.', ephemeral: true });
@@ -810,7 +931,6 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     const numero = interaction.options.getInteger('numero');
-    const hostMention = state.hostRole ? `<@&${state.hostRole}>` : '';
     const iniciador = `<@${interaction.user.id}>`;
 
     const voteContent = `🚦 **Votación Activa** 🚦
@@ -822,13 +942,16 @@ client.on('interactionCreate', async (interaction) => {
 -------------------------------------------------------------------------------
 **Votos requeridos:** \`${numero}\`
 **Votación iniciada por:** ${iniciador}
-@everyone
-${hostMention ? `|| ${hostMention} ||` : ''}`;
+@everyone`;
 
     const voteMsg = await interaction.channel.send({ content: voteContent });
     await voteMsg.react('✅');
 
-    activeVotes.set(voteMsg.id, { required: numero, reached: false });
+    activeVotes.set(voteMsg.id, {
+      required: numero,
+      reached: false,
+      startedBy: interaction.user.id
+    });
 
     setTimeout(() => {
       activeVotes.delete(voteMsg.id);
@@ -883,7 +1006,7 @@ ${hostMention ? `|| ${hostMention} ||` : ''}`;
         .setColor(PINK)
         .setTitle(`🌸 ${title}`)
         .setDescription(desc)
-        .setFooter({ text: 'Florida States RP' })
+        .setFooter({ text: 'Florida States RP • v2.0.0' })
         .setTimestamp();
     };
 
@@ -904,7 +1027,7 @@ ${hostMention ? `|| ${hostMention} ||` : ''}`;
           { name: '📆 Esta semana', value: formatDuration(userStats.weekly?.[getWeekKey()] || 0), inline: true },
           { name: '🗓️ Este mes', value: formatDuration(userStats.monthly?.[getMonthKey()] || 0), inline: true }
         )
-        .setFooter({ text: 'Florida States RP' })
+        .setFooter({ text: 'Florida States RP • v2.0.0' })
         .setTimestamp();
 
       await interaction.reply({ embeds: [embed] });
