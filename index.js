@@ -558,10 +558,13 @@ async function handleButton(interaction) {
         state.status = 'frp';
       }
 
+      // Al activar FRP, el código cambia automáticamente a FLRP1
+      state.codigo = 'FLRP1';
+
       saveState();
       await updatePermanentMessage(interaction);
       await sendTempMessage(interaction.channel, FRP_MSG);
-      await confirm('⏸️ **FRP-Farming activado**. El temporizador de RP se ha pausado.');
+      await confirm('⏸️ **FRP-Farming activado**. El temporizador de RP se ha pausado.\n🔑 Código cambiado a **FLRP1**.');
       break;
     }
 
