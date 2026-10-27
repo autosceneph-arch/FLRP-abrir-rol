@@ -1,7 +1,22 @@
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
+const {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
+  REST,
+  Routes
+} = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
+
+// Hora del DM diario (0-23, hora del servidor Railway / UTC normalmente)
+const DAILY_DM_HOUR = 21;
 
 const client = new Client({
   intents: [
@@ -14,10 +29,7 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User]
 });
 
-// Hora del DM diario (0-23). Ejemplo: 21 = 9:00 PM hora del servidor Railway
-const DAILY_DM_HOUR = 21;
-
-// ====================== RUTAS DE DATOS ======================
+// ====================== DATOS ======================
 const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -30,6 +42,7 @@ function loadJSON(file, defaultValue) {
   } catch (e) {}
   return defaultValue;
 }
+
 function saveJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
@@ -45,7 +58,7 @@ let state = loadJSON(STATE_FILE, {
   allowedRoles: [],
   permanentMessageRole: null,
   mentionRole: null,
-  dmUserId: null, // usuario que recibe el top diario
+  dmUserId: null,
   lastDailyDmDate: null,
   vias: null,
   limite: null,
@@ -58,8 +71,12 @@ let state = loadJSON(STATE_FILE, {
 let stats = loadJSON(STATS_FILE, {});
 const activeVotes = new Map();
 
-function saveState() { saveJSON(STATE_FILE, state); }
-function saveStats() { saveJSON(STATS_FILE, stats); }
+function saveState() {
+  saveJSON(STATE_FILE, state);
+}
+function saveStats() {
+  saveJSON(STATS_FILE, stats);
+}
 
 // ====================== UTILIDADES ======================
 function getUserStats(userId) {
@@ -83,8 +100,9 @@ function getUserStats(userId) {
 }
 
 function formatDuration(ms) {
-  const hours = Math.floor(ms / 3600000);
-  const minutes = Math.floor((ms % 3600000) / 60000);
+  const safe = Math.max(0, Math.floor(Number(ms) || 0));
+  const hours = Math.floor(safe / 3600000);
+  const minutes = Math.floor((safe % 3600000) / 60000);
   return `${hours}h ${minutes}m`;
 }
 
@@ -102,12 +120,14 @@ function getMonthKey(date = new Date()) {
 }
 
 function hasGeneralPermission(member) {
+  if (!member) return false;
   if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
-  if (state.allowedRoles.length === 0) return true;
+  if (!state.allowedRoles || state.allowedRoles.length === 0) return true;
   return member.roles.cache.some(r => state.allowedRoles.includes(r.id));
 }
 
 function canUsePermanentMessage(member) {
+  if (!member) return false;
   if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
   if (!state.permanentMessageRole) return false;
   return member.roles.cache.has(state.permanentMessageRole);
@@ -133,7 +153,9 @@ async function safeDelete(message, retries = 5) {
 }
 
 function scheduleDelete(message, delayMs) {
-  setTimeout(() => safeDelete(message).catch(() => {}), delayMs);
+  setTimeout(() => {
+    safeDelete(message).catch(() => {});
+  }, delayMs);
 }
 
 async function sendActionDm(userId, text) {
@@ -152,7 +174,7 @@ async function sendActionDm(userId, text) {
   } catch (e) {}
 }
 
-// ====================== SEED ESTADÍSTICAS ======================
+// ====================== SEED ======================
 function seedInitialStats() {
   const weekKey = getWeekKey();
   const monthKey = getMonthKey();
@@ -258,7 +280,7 @@ function seedInitialStats() {
   }
 }
 
-// ====================== TOP HORAS (para DM diario) ======================
+// ====================== DM DIARIO ======================
 function buildHoursLeaderboardEmbed() {
   const sorted = Object.entries(stats)
     .map(([id, s]) => ({ id, value: s.totalHours || 0 }))
@@ -281,7 +303,6 @@ function buildHoursLeaderboardEmbed() {
 
 async function sendDailyTopDm() {
   if (!state.dmUserId) return;
-
   const today = new Date().toISOString().slice(0, 10);
   if (state.lastDailyDmDate === today) return;
 
@@ -292,11 +313,11 @@ async function sendDailyTopDm() {
     saveState();
     console.log(`✅ DM diario enviado a ${state.dmUserId}`);
   } catch (e) {
-    console.log('No se pudo enviar el DM diario:', e.message);
+    console.log('No se pudo enviar DM diario:', e.message);
   }
 }
 
-// ====================== EMBEDS ======================
+// ====================== EMBED ESTADO ======================
 const PINK = 0xFF69B4;
 
 function createStatusEmbed() {
@@ -314,12 +335,12 @@ function createStatusEmbed() {
     color = 0xFF0000;
   }
 
-  let viasDisplay = state.status === 'frp' ? '-' : (state.vias !== null ? state.vias : 'No definido');
-  let limiteDisplay = state.status === 'frp' ? '-' : (state.limite !== null ? state.limite : 'No definido');
+  const viasDisplay = state.status === 'frp' ? '-' : (state.vias !== null && state.vias !== undefined ? state.vias : 'No definido');
+  const limiteDisplay = state.status === 'frp' ? '-' : (state.limite !== null && state.limite !== undefined ? state.limite : 'No definido');
 
   let adelantamientoDisplay = 'No definido';
   if (state.adelantamiento === 0) adelantamientoDisplay = 'no';
-  else if (state.adelantamiento !== null) adelantamientoDisplay = state.adelantamiento;
+  else if (state.adelantamiento !== null && state.adelantamiento !== undefined) adelantamientoDisplay = state.adelantamiento;
 
   let hostDisplay = '-';
   if (state.status === 'active' && state.startedBy) hostDisplay = `<@${state.startedBy}>`;
@@ -351,7 +372,7 @@ function createButtons() {
   );
 }
 
-// ====================== MENSAJES AUTOMÁTICOS ======================
+// ====================== MENSAJES ======================
 function getAperturaMsg(userId) {
   const mention = state.mentionRole ? `<@&${state.mentionRole}>` : '';
   return `# 🚨・APERTURA DE ROL
@@ -402,7 +423,10 @@ async function updatePermanentMessage(interaction = null) {
   try {
     const channel = await client.channels.fetch(state.channelId);
     const message = await channel.messages.fetch(state.messageId);
-    await message.edit({ embeds: [createStatusEmbed()], components: [createButtons()] });
+    await message.edit({
+      embeds: [createStatusEmbed()],
+      components: [createButtons()]
+    });
   } catch (err) {
     console.log('No se pudo editar el mensaje permanente...');
     if (interaction) {
@@ -426,18 +450,24 @@ async function handleButton(interaction) {
   const userId = interaction.user.id;
   const userStats = getUserStats(userId);
   const now = Date.now();
-  const confirm = async (text) => interaction.reply({ content: text, ephemeral: true });
+
+  const confirm = async (text) => {
+    await interaction.reply({ content: text, ephemeral: true });
+  };
 
   switch (interaction.customId) {
     case 'activar_rol': {
       if (state.status === 'active') return confirm('⚠️ El rol ya está activo.');
+
       state.status = 'active';
       state.startedBy = userId;
       state.startTime = now;
       state.pausedAt = null;
       state.totalPausedMs = 0;
-      userStats.rpsOpened++;
+
+      userStats.rpsOpened = (userStats.rpsOpened || 0) + 1;
       userStats.activeDays.add(new Date().toISOString().slice(0, 10));
+
       saveState();
       saveStats();
       await updatePermanentMessage(interaction);
@@ -446,29 +476,44 @@ async function handleButton(interaction) {
       await confirm('🟢 **Rol activado** correctamente.');
       break;
     }
+
     case 'cerrar_rol': {
       if (state.status === 'closed') return confirm('⚠️ El rol ya está cerrado.');
+
       let duration = 0;
       if (state.startTime) {
         duration = now - state.startTime - (state.totalPausedMs || 0);
         if (state.pausedAt) duration -= (now - state.pausedAt);
         if (duration < 0) duration = 0;
       }
+
       const openerId = state.startedBy || userId;
       const openerStats = getUserStats(openerId);
-      openerStats.totalHours += duration;
-      openerStats.rpsFinished++;
-      openerStats.sessions.push({ start: state.startTime, end: now, durationMs: duration, agregado: false });
+
+      openerStats.totalHours = (openerStats.totalHours || 0) + duration;
+      openerStats.rpsFinished = (openerStats.rpsFinished || 0) + 1;
+      if (!openerStats.sessions) openerStats.sessions = [];
+      openerStats.sessions.push({
+        start: state.startTime,
+        end: now,
+        durationMs: duration,
+        agregado: false
+      });
+
       const weekKey = getWeekKey();
       const monthKey = getMonthKey();
+      if (!openerStats.weekly) openerStats.weekly = {};
+      if (!openerStats.monthly) openerStats.monthly = {};
       openerStats.weekly[weekKey] = (openerStats.weekly[weekKey] || 0) + duration;
       openerStats.monthly[monthKey] = (openerStats.monthly[monthKey] || 0) + duration;
       openerStats.activeDays = Array.from(openerStats.activeDays);
+
       state.status = 'closed';
       state.startedBy = null;
       state.startTime = null;
       state.pausedAt = null;
       state.totalPausedMs = 0;
+
       saveState();
       saveStats();
       await updatePermanentMessage(interaction);
@@ -480,13 +525,17 @@ async function handleButton(interaction) {
       await confirm(`🏁 **Rol cerrado**. Duración: **${formatDuration(duration)}**`);
       break;
     }
+
     case 'activar_frp': {
       if (state.status === 'frp') return confirm('⚠️ FRP-Farming ya está activo.');
-      if (state.status === 'closed') state.status = 'frp';
-      else {
+
+      if (state.status === 'closed') {
+        state.status = 'frp';
+      } else {
         state.pausedAt = now;
         state.status = 'frp';
       }
+
       state.codigo = 'FLRP1';
       saveState();
       await updatePermanentMessage(interaction);
@@ -495,13 +544,18 @@ async function handleButton(interaction) {
       await confirm('⏸️ **FRP-Farming activado**. Código → **FLRP1**');
       break;
     }
+
     case 'desactivar_frp': {
       if (state.status !== 'frp') return confirm('⚠️ FRP-Farming no está activo.');
+
       if (state.pausedAt && state.startTime) {
-        state.totalPausedMs += (now - state.pausedAt);
+        state.totalPausedMs = (state.totalPausedMs || 0) + (now - state.pausedAt);
         state.pausedAt = null;
         state.status = 'active';
-      } else state.status = 'closed';
+      } else {
+        state.status = 'closed';
+      }
+
       saveState();
       await updatePermanentMessage(interaction);
       await sendTempMessage(interaction.channel, getDesactivarFrpMsg(userId));
@@ -512,88 +566,260 @@ async function handleButton(interaction) {
   }
 }
 
-// ====================== COMANDOS ======================
+// ====================== COMANDOS (TODOS CON DESCRIPTION) ======================
 const commands = [
   new SlashCommandBuilder()
     .setName('mensaje-permanente')
-    .setDescription('Coloca el mensaje permanente de estado del rol'),
+    .setDescription('Coloca el mensaje permanente de estado del rol en este canal'),
 
   new SlashCommandBuilder()
     .setName('config-roles')
-    .setDescription('Configura roles y usuario de DM diario')
-    .addRoleOption(opt => opt.setName('rol').setDescription('Rol general (botones + comandos)').setRequired(true))
-    .addRoleOption(opt => opt.setName('rol-permanente').setDescription('Rol para /mensaje-permanente y editar stats').setRequired(false))
-    .addRoleOption(opt => opt.setName('rol-mencion').setDescription('Rol mencionado en apertura/cierre').setRequired(false))
-    .addUserOption(opt => opt.setName('dm').setDescription('Usuario que recibe el top de horas diario por DM').setRequired(false))
+    .setDescription('Configura roles de permisos y usuario del DM diario')
+    .addRoleOption(opt =>
+      opt.setName('rol')
+        .setDescription('Rol general (botones y comandos) - se añade o quita')
+        .setRequired(true)
+    )
+    .addRoleOption(opt =>
+      opt.setName('rol-permanente')
+        .setDescription('Rol único para mensaje permanente y editar stats')
+        .setRequired(false)
+    )
+    .addRoleOption(opt =>
+      opt.setName('rol-mencion')
+        .setDescription('Rol mencionado en apertura y cierre de rol')
+        .setRequired(false)
+    )
+    .addUserOption(opt =>
+      opt.setName('dm')
+        .setDescription('Usuario que recibe el top de horas diario por DM')
+        .setRequired(false)
+    )
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-  new SlashCommandBuilder().setName('vias').setDescription('Configura vías (1 o 2)')
-    .addIntegerOption(opt => opt.setName('valor').setRequired(true).setMinValue(1).setMaxValue(2)),
+  new SlashCommandBuilder()
+    .setName('vias')
+    .setDescription('Configura el número de vías (1 o 2)')
+    .addIntegerOption(opt =>
+      opt.setName('valor')
+        .setDescription('Número de vías (1 o 2)')
+        .setRequired(true)
+        .setMinValue(1)
+        .setMaxValue(2)
+    ),
 
-  new SlashCommandBuilder().setName('limite').setDescription('Límite de velocidad')
-    .addIntegerOption(opt => opt.setName('valor').setRequired(true).setMinValue(1)),
+  new SlashCommandBuilder()
+    .setName('limite')
+    .setDescription('Configura el límite de velocidad')
+    .addIntegerOption(opt =>
+      opt.setName('valor')
+        .setDescription('Límite de velocidad')
+        .setRequired(true)
+        .setMinValue(1)
+    ),
 
-  new SlashCommandBuilder().setName('codigo').setDescription('Código del servidor')
-    .addStringOption(opt => opt.setName('codigo').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('codigo')
+    .setDescription('Configura el código del servidor')
+    .addStringOption(opt =>
+      opt.setName('codigo')
+        .setDescription('Código del servidor')
+        .setRequired(true)
+    ),
 
-  new SlashCommandBuilder().setName('adelantamiento').setDescription('0 = no, o 80-200')
-    .addIntegerOption(opt => opt.setName('valor').setRequired(true).setMinValue(0).setMaxValue(200)),
+  new SlashCommandBuilder()
+    .setName('adelantamiento')
+    .setDescription('Configura el adelantamiento (0 = no, o entre 80 y 200)')
+    .addIntegerOption(opt =>
+      opt.setName('valor')
+        .setDescription('0 para no, o un número entre 80 y 200')
+        .setRequired(true)
+        .setMinValue(0)
+        .setMaxValue(200)
+    ),
 
-  new SlashCommandBuilder().setName('carteles').setDescription('Estado de carteles')
-    .addStringOption(opt => opt.setName('estado').setRequired(true)
-      .addChoices({ name: 'Activos', value: 'activos' }, { name: 'Inactivos', value: 'inactivos' })),
+  new SlashCommandBuilder()
+    .setName('carteles')
+    .setDescription('Configura el estado de los carteles')
+    .addStringOption(opt =>
+      opt.setName('estado')
+        .setDescription('Estado de los carteles')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Activos', value: 'activos' },
+          { name: 'Inactivos', value: 'inactivos' }
+        )
+    ),
 
-  new SlashCommandBuilder().setName('evento').setDescription('Activa un evento')
-    .addStringOption(opt => opt.setName('nombre').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('evento')
+    .setDescription('Activa un evento en el mensaje permanente')
+    .addStringOption(opt =>
+      opt.setName('nombre')
+        .setDescription('Nombre del evento')
+        .setRequired(true)
+    ),
 
-  new SlashCommandBuilder().setName('terminar-evento').setDescription('Termina el evento'),
+  new SlashCommandBuilder()
+    .setName('terminar-evento')
+    .setDescription('Termina el evento actual'),
 
-  new SlashCommandBuilder().setName('votacion').setDescription('Inicia votación')
-    .addIntegerOption(opt => opt.setName('numero').setRequired(true).setMinValue(1)),
+  new SlashCommandBuilder()
+    .setName('votacion')
+    .setDescription('Inicia una votación para abrir rol')
+    .addIntegerOption(opt =>
+      opt.setName('numero')
+        .setDescription('Número de votos requeridos')
+        .setRequired(true)
+        .setMinValue(1)
+    ),
 
-  new SlashCommandBuilder().setName('agregar-dias').setDescription('Agrega días activos (rol permanente)')
-    .addUserOption(opt => opt.setName('usuario').setRequired(true))
-    .addIntegerOption(opt => opt.setName('cantidad').setRequired(true).setMinValue(1)),
+  new SlashCommandBuilder()
+    .setName('agregar-dias')
+    .setDescription('Agrega días activos a un usuario (solo rol permanente)')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Usuario al que se le agregan días')
+        .setRequired(true)
+    )
+    .addIntegerOption(opt =>
+      opt.setName('cantidad')
+        .setDescription('Cantidad de días a agregar')
+        .setRequired(true)
+        .setMinValue(1)
+    ),
 
-  new SlashCommandBuilder().setName('agregar-tiempo').setDescription('Agrega minutos (rol permanente)')
-    .addUserOption(opt => opt.setName('usuario').setRequired(true))
-    .addIntegerOption(opt => opt.setName('minutos').setRequired(true).setMinValue(1)),
+  new SlashCommandBuilder()
+    .setName('agregar-tiempo')
+    .setDescription('Agrega tiempo en minutos a un usuario (solo rol permanente)')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Usuario al que se le agrega tiempo')
+        .setRequired(true)
+    )
+    .addIntegerOption(opt =>
+      opt.setName('minutos')
+        .setDescription('Minutos a agregar')
+        .setRequired(true)
+        .setMinValue(1)
+    ),
 
-  new SlashCommandBuilder().setName('quitar-tiempo').setDescription('Quita minutos / horas (rol permanente)')
-    .addUserOption(opt => opt.setName('usuario').setRequired(true))
-    .addIntegerOption(opt => opt.setName('minutos').setRequired(true).setMinValue(1)),
+  new SlashCommandBuilder()
+    .setName('quitar-tiempo')
+    .setDescription('Quita tiempo en minutos a un usuario (solo rol permanente)')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Usuario al que se le quita tiempo')
+        .setRequired(true)
+    )
+    .addIntegerOption(opt =>
+      opt.setName('minutos')
+        .setDescription('Minutos a quitar')
+        .setRequired(true)
+        .setMinValue(1)
+    ),
 
-  new SlashCommandBuilder().setName('agregar-rps-abiertos').setDescription('Agrega RPs abiertos (rol permanente)')
-    .addUserOption(opt => opt.setName('usuario').setRequired(true))
-    .addIntegerOption(opt => opt.setName('cantidad').setRequired(true).setMinValue(1)),
+  new SlashCommandBuilder()
+    .setName('agregar-rps-abiertos')
+    .setDescription('Agrega RPs abiertos a un usuario (solo rol permanente)')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Usuario')
+        .setRequired(true)
+    )
+    .addIntegerOption(opt =>
+      opt.setName('cantidad')
+        .setDescription('Cantidad a agregar')
+        .setRequired(true)
+        .setMinValue(1)
+    ),
 
-  new SlashCommandBuilder().setName('agregar-rps-cerrados').setDescription('Agrega RPs finalizados (rol permanente)')
-    .addUserOption(opt => opt.setName('usuario').setRequired(true))
-    .addIntegerOption(opt => opt.setName('cantidad').setRequired(true).setMinValue(1)),
+  new SlashCommandBuilder()
+    .setName('agregar-rps-cerrados')
+    .setDescription('Agrega RPs finalizados a un usuario (solo rol permanente)')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Usuario')
+        .setRequired(true)
+    )
+    .addIntegerOption(opt =>
+      opt.setName('cantidad')
+        .setDescription('Cantidad a agregar')
+        .setRequired(true)
+        .setMinValue(1)
+    ),
 
-  new SlashCommandBuilder().setName('rp-stats').setDescription('Stats de un usuario')
-    .addUserOption(opt => opt.setName('usuario').setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('rp-stats')
+    .setDescription('Ver estadísticas de RP de un usuario')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Usuario a consultar (opcional)')
+        .setRequired(false)
+    ),
 
-  new SlashCommandBuilder().setName('horas-totales').setDescription('Leaderboard horas totales')
-    .addUserOption(opt => opt.setName('usuario').setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('horas-totales')
+    .setDescription('Leaderboard de horas totales en RP')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Ver de un usuario específico (opcional)')
+        .setRequired(false)
+    ),
 
-  new SlashCommandBuilder().setName('rps-abiertos').setDescription('Leaderboard RPs abiertos')
-    .addUserOption(opt => opt.setName('usuario').setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('rps-abiertos')
+    .setDescription('Leaderboard de RPs abiertos')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Ver de un usuario específico (opcional)')
+        .setRequired(false)
+    ),
 
-  new SlashCommandBuilder().setName('rps-finalizados').setDescription('Leaderboard RPs finalizados')
-    .addUserOption(opt => opt.setName('usuario').setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('rps-finalizados')
+    .setDescription('Leaderboard de RPs finalizados')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Ver de un usuario específico (opcional)')
+        .setRequired(false)
+    ),
 
-  new SlashCommandBuilder().setName('dias-activos').setDescription('Leaderboard días activos')
-    .addUserOption(opt => opt.setName('usuario').setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('dias-activos')
+    .setDescription('Leaderboard de días activos en RP')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Ver de un usuario específico (opcional)')
+        .setRequired(false)
+    ),
 
-  new SlashCommandBuilder().setName('actividad-semanal').setDescription('Leaderboard semanal')
-    .addUserOption(opt => opt.setName('usuario').setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('actividad-semanal')
+    .setDescription('Leaderboard de actividad semanal')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Ver de un usuario específico (opcional)')
+        .setRequired(false)
+    ),
 
-  new SlashCommandBuilder().setName('actividad-mensual').setDescription('Leaderboard mensual')
-    .addUserOption(opt => opt.setName('usuario').setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('actividad-mensual')
+    .setDescription('Leaderboard de actividad mensual')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Ver de un usuario específico (opcional)')
+        .setRequired(false)
+    ),
 
-  new SlashCommandBuilder().setName('duracion-sesiones').setDescription('Últimas sesiones')
-    .addUserOption(opt => opt.setName('usuario').setRequired(false))
+  new SlashCommandBuilder()
+    .setName('duracion-sesiones')
+    .setDescription('Ver últimas sesiones de un usuario')
+    .addUserOption(opt =>
+      opt.setName('usuario')
+        .setDescription('Usuario a consultar (opcional)')
+        .setRequired(false)
+    )
 ].map(c => c.toJSON());
 
 // ====================== READY ======================
@@ -601,20 +827,25 @@ client.once('ready', async () => {
   console.log(`🌸 Bot listo como ${client.user.tag} | v2.2.0`);
   seedInitialStats();
 
+  if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
+    console.error('❌ Faltan TOKEN, CLIENT_ID o GUILD_ID en las variables de entorno');
+  }
+
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
   try {
     await rest.put(
       Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
       { body: commands }
     );
-    console.log('✅ Comandos registrados');
+    console.log('✅ Comandos slash registrados');
   } catch (e) {
-    console.error(e);
+    console.error('❌ Error registrando comandos:', e);
   }
 
-  if (state.channelId && state.messageId) await updatePermanentMessage();
+  if (state.channelId && state.messageId) {
+    await updatePermanentMessage();
+  }
 
-  // Revisar cada minuto si toca enviar el DM diario
   setInterval(() => {
     const now = new Date();
     if (now.getHours() === DAILY_DM_HOUR && now.getMinutes() === 0) {
@@ -622,9 +853,10 @@ client.once('ready', async () => {
     }
   }, 60 * 1000);
 
-  // Por si el bot arranca justo en esa hora
   const now = new Date();
-  if (now.getHours() === DAILY_DM_HOUR) sendDailyTopDm();
+  if (now.getHours() === DAILY_DM_HOUR) {
+    sendDailyTopDm();
+  }
 });
 
 // ====================== AUTO-BORRADO ======================
@@ -642,8 +874,10 @@ client.on('messageReactionAdd', async (reaction, user) => {
   if (reaction.partial) {
     try { await reaction.fetch(); } catch { return; }
   }
+
   const message = reaction.message;
   if (!activeVotes.has(message.id)) return;
+
   const voteData = activeVotes.get(message.id);
   if (voteData.reached) return;
   if (reaction.emoji.name !== '✅') return;
@@ -661,121 +895,151 @@ client.on('messageReactionAdd', async (reaction, user) => {
 
 // ====================== INTERACCIONES ======================
 client.on('interactionCreate', async (interaction) => {
-  if (interaction.isButton()) return handleButton(interaction);
-  if (!interaction.isChatInputCommand()) return;
+  try {
+    if (interaction.isButton()) return handleButton(interaction);
+    if (!interaction.isChatInputCommand()) return;
 
-  const { commandName } = interaction;
+    const { commandName } = interaction;
 
-  if (commandName === 'mensaje-permanente') {
-    if (!canUsePermanentMessage(interaction.member)) {
-      return interaction.reply({ content: '❌ Solo el rol-permanente o Admins.', ephemeral: true });
+    // ----- mensaje-permanente -----
+    if (commandName === 'mensaje-permanente') {
+      if (!canUsePermanentMessage(interaction.member)) {
+        return interaction.reply({ content: '❌ Solo el rol-permanente o Admins.', ephemeral: true });
+      }
+      const msg = await interaction.channel.send({
+        embeds: [createStatusEmbed()],
+        components: [createButtons()]
+      });
+      state.messageId = msg.id;
+      state.channelId = interaction.channel.id;
+      saveState();
+      return interaction.reply({ content: '✅ Mensaje permanente colocado.', ephemeral: true });
     }
-    const msg = await interaction.channel.send({
-      embeds: [createStatusEmbed()],
-      components: [createButtons()]
-    });
-    state.messageId = msg.id;
-    state.channelId = interaction.channel.id;
-    saveState();
-    await interaction.reply({ content: '✅ Mensaje permanente colocado.', ephemeral: true });
-  }
 
-  else if (commandName === 'config-roles') {
-    const role = interaction.options.getRole('rol');
-    const permanentRole = interaction.options.getRole('rol-permanente');
-    const mentionRole = interaction.options.getRole('rol-mencion');
-    const dmUser = interaction.options.getUser('dm');
-    let response = '';
+    // ----- config-roles -----
+    if (commandName === 'config-roles') {
+      const role = interaction.options.getRole('rol');
+      const permanentRole = interaction.options.getRole('rol-permanente');
+      const mentionRole = interaction.options.getRole('rol-mencion');
+      const dmUser = interaction.options.getUser('dm');
+      let response = '';
 
-    const idx = state.allowedRoles.indexOf(role.id);
-    if (idx === -1) {
-      state.allowedRoles.push(role.id);
-      response += `✅ Rol general **${role.name}** añadido.\n`;
-    } else {
-      state.allowedRoles.splice(idx, 1);
-      response += `🗑️ Rol general **${role.name}** eliminado.\n`;
+      if (!state.allowedRoles) state.allowedRoles = [];
+      const idx = state.allowedRoles.indexOf(role.id);
+      if (idx === -1) {
+        state.allowedRoles.push(role.id);
+        response += `✅ Rol general **${role.name}** añadido.\n`;
+      } else {
+        state.allowedRoles.splice(idx, 1);
+        response += `🗑️ Rol general **${role.name}** eliminado.\n`;
+      }
+
+      if (permanentRole) {
+        state.permanentMessageRole = permanentRole.id;
+        response += `🔒 Rol permanente: **${permanentRole.name}**\n`;
+      }
+      if (mentionRole) {
+        state.mentionRole = mentionRole.id;
+        response += `📢 Rol mención: **${mentionRole.name}**\n`;
+      }
+      if (dmUser) {
+        state.dmUserId = dmUser.id;
+        response += `📩 DM diario: **${dmUser.tag}** (a las ${DAILY_DM_HOUR}:00)`;
+      }
+
+      saveState();
+      return interaction.reply({ content: response || 'Sin cambios.', ephemeral: true });
     }
-    if (permanentRole) {
-      state.permanentMessageRole = permanentRole.id;
-      response += `🔒 Rol permanente: **${permanentRole.name}**\n`;
+
+    // ----- vias -----
+    if (commandName === 'vias') {
+      if (!hasGeneralPermission(interaction.member)) {
+        return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
+      }
+      state.vias = interaction.options.getInteger('valor');
+      saveState();
+      await updatePermanentMessage(interaction);
+      return interaction.reply({ content: `✅ Vías: **${state.vias}**`, ephemeral: true });
     }
-    if (mentionRole) {
-      state.mentionRole = mentionRole.id;
-      response += `📢 Rol mención: **${mentionRole.name}**\n`;
+
+    // ----- limite -----
+    if (commandName === 'limite') {
+      if (!hasGeneralPermission(interaction.member)) {
+        return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
+      }
+      state.limite = interaction.options.getInteger('valor');
+      saveState();
+      await updatePermanentMessage(interaction);
+      return interaction.reply({ content: `✅ Límite: **${state.limite}**`, ephemeral: true });
     }
-    if (dmUser) {
-      state.dmUserId = dmUser.id;
-      response += `📩 DM diario configurado para: **${dmUser.tag}** (todos los días a las ${DAILY_DM_HOUR}:00)`;
+
+    // ----- codigo -----
+    if (commandName === 'codigo') {
+      if (!hasGeneralPermission(interaction.member)) {
+        return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
+      }
+      state.codigo = interaction.options.getString('codigo');
+      saveState();
+      await updatePermanentMessage(interaction);
+      return interaction.reply({ content: `🔑 Código: **${state.codigo}**`, ephemeral: true });
     }
-    saveState();
-    await interaction.reply({ content: response || 'Sin cambios.', ephemeral: true });
-  }
 
-  else if (commandName === 'vias') {
-    if (!hasGeneralPermission(interaction.member)) return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
-    state.vias = interaction.options.getInteger('valor');
-    saveState();
-    await updatePermanentMessage(interaction);
-    await interaction.reply({ content: `✅ Vías: **${state.vias}**`, ephemeral: true });
-  }
-
-  else if (commandName === 'limite') {
-    if (!hasGeneralPermission(interaction.member)) return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
-    state.limite = interaction.options.getInteger('valor');
-    saveState();
-    await updatePermanentMessage(interaction);
-    await interaction.reply({ content: `✅ Límite: **${state.limite}**`, ephemeral: true });
-  }
-
-  else if (commandName === 'codigo') {
-    if (!hasGeneralPermission(interaction.member)) return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
-    state.codigo = interaction.options.getString('codigo');
-    saveState();
-    await updatePermanentMessage(interaction);
-    await interaction.reply({ content: `🔑 Código: **${state.codigo}**`, ephemeral: true });
-  }
-
-  else if (commandName === 'adelantamiento') {
-    if (!hasGeneralPermission(interaction.member)) return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
-    const valor = interaction.options.getInteger('valor');
-    if (valor !== 0 && (valor < 80 || valor > 200)) {
-      return interaction.reply({ content: '❌ Usa **0** o entre **80 y 200**.', ephemeral: true });
+    // ----- adelantamiento -----
+    if (commandName === 'adelantamiento') {
+      if (!hasGeneralPermission(interaction.member)) {
+        return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
+      }
+      const valor = interaction.options.getInteger('valor');
+      if (valor !== 0 && (valor < 80 || valor > 200)) {
+        return interaction.reply({ content: '❌ Usa **0** o un número entre **80 y 200**.', ephemeral: true });
+      }
+      state.adelantamiento = valor;
+      saveState();
+      await updatePermanentMessage(interaction);
+      return interaction.reply({ content: `⚡ Adelantamiento: **${valor === 0 ? 'no' : valor}**`, ephemeral: true });
     }
-    state.adelantamiento = valor;
-    saveState();
-    await updatePermanentMessage(interaction);
-    await interaction.reply({ content: `⚡ Adelantamiento: **${valor === 0 ? 'no' : valor}**`, ephemeral: true });
-  }
 
-  else if (commandName === 'carteles') {
-    if (!hasGeneralPermission(interaction.member)) return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
-    state.carteles = interaction.options.getString('estado');
-    saveState();
-    await updatePermanentMessage(interaction);
-    await interaction.reply({ content: `🏴 Carteles: **${state.carteles}**`, ephemeral: true });
-  }
+    // ----- carteles -----
+    if (commandName === 'carteles') {
+      if (!hasGeneralPermission(interaction.member)) {
+        return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
+      }
+      state.carteles = interaction.options.getString('estado');
+      saveState();
+      await updatePermanentMessage(interaction);
+      return interaction.reply({ content: `🏴 Carteles: **${state.carteles}**`, ephemeral: true });
+    }
 
-  else if (commandName === 'evento') {
-    if (!hasGeneralPermission(interaction.member)) return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
-    state.evento = interaction.options.getString('nombre');
-    saveState();
-    await updatePermanentMessage(interaction);
-    await interaction.reply({ content: `🎉 Evento: **${state.evento}**`, ephemeral: true });
-  }
+    // ----- evento -----
+    if (commandName === 'evento') {
+      if (!hasGeneralPermission(interaction.member)) {
+        return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
+      }
+      state.evento = interaction.options.getString('nombre');
+      saveState();
+      await updatePermanentMessage(interaction);
+      return interaction.reply({ content: `🎉 Evento: **${state.evento}**`, ephemeral: true });
+    }
 
-  else if (commandName === 'terminar-evento') {
-    if (!hasGeneralPermission(interaction.member)) return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
-    state.evento = 'Sin eventos';
-    saveState();
-    await updatePermanentMessage(interaction);
-    await interaction.reply({ content: '✅ Evento terminado.', ephemeral: true });
-  }
+    // ----- terminar-evento -----
+    if (commandName === 'terminar-evento') {
+      if (!hasGeneralPermission(interaction.member)) {
+        return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
+      }
+      state.evento = 'Sin eventos';
+      saveState();
+      await updatePermanentMessage(interaction);
+      return interaction.reply({ content: '✅ Evento terminado.', ephemeral: true });
+    }
 
-  else if (commandName === 'votacion') {
-    if (!hasGeneralPermission(interaction.member)) return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
-    const numero = interaction.options.getInteger('numero');
-    const iniciador = `<@${interaction.user.id}>`;
-    const voteContent = `🚦 **Votación Activa** 🚦
+    // ----- votacion -----
+    if (commandName === 'votacion') {
+      if (!hasGeneralPermission(interaction.member)) {
+        return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
+      }
+      const numero = interaction.options.getInteger('numero');
+      const iniciador = `<@${interaction.user.id}>`;
+      const voteContent = `🚦 **Votación Activa** 🚦
 -------------------------------------------------------------------------------
 📍⠇Se Acaba De Iniciar Una Votación Para Empezar Una Sesión De Roleplay
 💳 ⠇Asegúrate De Tener Tus Documentos En Regla Para Evitar Conflictos
@@ -785,110 +1049,129 @@ client.on('interactionCreate', async (interaction) => {
 **Votos requeridos:** \`${numero}\`
 **Votación iniciada por:** ${iniciador}
 @everyone`;
-    const voteMsg = await interaction.channel.send({ content: voteContent });
-    await voteMsg.react('✅');
-    activeVotes.set(voteMsg.id, { required: numero, reached: false, startedBy: interaction.user.id });
-    scheduleDelete(voteMsg, 40 * 60 * 1000);
-    await interaction.reply({ content: `✅ Votación iniciada. Se necesitan **${numero}** ✅`, ephemeral: true });
-  }
 
-  else if (commandName === 'agregar-dias') {
-    if (!canUsePermanentMessage(interaction.member)) {
-      return interaction.reply({ content: '❌ Solo el rol de **mensaje permanente** (o Admins).', ephemeral: true });
+      const voteMsg = await interaction.channel.send({ content: voteContent });
+      await voteMsg.react('✅');
+      activeVotes.set(voteMsg.id, {
+        required: numero,
+        reached: false,
+        startedBy: interaction.user.id
+      });
+      scheduleDelete(voteMsg, 40 * 60 * 1000);
+      return interaction.reply({ content: `✅ Votación iniciada. Se necesitan **${numero}** ✅`, ephemeral: true });
     }
-    const target = interaction.options.getUser('usuario');
-    const cantidad = interaction.options.getInteger('cantidad');
-    const userStats = getUserStats(target.id);
-    for (let i = 0; i < cantidad; i++) userStats.activeDays.add(`manual-${Date.now()}-${i}`);
-    userStats.activeDays = Array.from(userStats.activeDays);
-    saveStats();
-    await interaction.reply({ content: `✅ +**${cantidad}** día(s) a <@${target.id}>`, ephemeral: true });
-  }
 
-  else if (commandName === 'agregar-tiempo') {
-    if (!canUsePermanentMessage(interaction.member)) {
-      return interaction.reply({ content: '❌ Solo el rol de **mensaje permanente** (o Admins).', ephemeral: true });
+    // ----- agregar-dias -----
+    if (commandName === 'agregar-dias') {
+      if (!canUsePermanentMessage(interaction.member)) {
+        return interaction.reply({ content: '❌ Solo el rol de **mensaje permanente** (o Admins).', ephemeral: true });
+      }
+      const target = interaction.options.getUser('usuario');
+      const cantidad = interaction.options.getInteger('cantidad');
+      const userStats = getUserStats(target.id);
+      for (let i = 0; i < cantidad; i++) {
+        userStats.activeDays.add(`manual-${Date.now()}-${i}`);
+      }
+      userStats.activeDays = Array.from(userStats.activeDays);
+      saveStats();
+      return interaction.reply({ content: `✅ +**${cantidad}** día(s) a <@${target.id}>`, ephemeral: true });
     }
-    const target = interaction.options.getUser('usuario');
-    const minutos = interaction.options.getInteger('minutos');
-    const ms = minutos * 60 * 1000;
-    const userStats = getUserStats(target.id);
-    userStats.totalHours = (userStats.totalHours || 0) + ms;
-    const weekKey = getWeekKey();
-    const monthKey = getMonthKey();
-    if (!userStats.weekly) userStats.weekly = {};
-    if (!userStats.monthly) userStats.monthly = {};
-    userStats.weekly[weekKey] = (userStats.weekly[weekKey] || 0) + ms;
-    userStats.monthly[monthKey] = (userStats.monthly[monthKey] || 0) + ms;
-    if (!userStats.sessions) userStats.sessions = [];
-    userStats.sessions.push({ start: Date.now(), end: Date.now(), durationMs: ms, agregado: true });
-    saveStats();
-    await interaction.reply({
-      content: `✅ +**${formatDuration(ms)}** (${minutos} min) a <@${target.id}>`,
-      ephemeral: true
-    });
-  }
 
-  else if (commandName === 'quitar-tiempo') {
-    if (!canUsePermanentMessage(interaction.member)) {
-      return interaction.reply({ content: '❌ Solo el rol de **mensaje permanente** (o Admins).', ephemeral: true });
+    // ----- agregar-tiempo -----
+    if (commandName === 'agregar-tiempo') {
+      if (!canUsePermanentMessage(interaction.member)) {
+        return interaction.reply({ content: '❌ Solo el rol de **mensaje permanente** (o Admins).', ephemeral: true });
+      }
+      const target = interaction.options.getUser('usuario');
+      const minutos = interaction.options.getInteger('minutos');
+      const ms = minutos * 60 * 1000;
+      const userStats = getUserStats(target.id);
+
+      userStats.totalHours = (userStats.totalHours || 0) + ms;
+      const weekKey = getWeekKey();
+      const monthKey = getMonthKey();
+      if (!userStats.weekly) userStats.weekly = {};
+      if (!userStats.monthly) userStats.monthly = {};
+      userStats.weekly[weekKey] = (userStats.weekly[weekKey] || 0) + ms;
+      userStats.monthly[monthKey] = (userStats.monthly[monthKey] || 0) + ms;
+      if (!userStats.sessions) userStats.sessions = [];
+      userStats.sessions.push({
+        start: Date.now(),
+        end: Date.now(),
+        durationMs: ms,
+        agregado: true
+      });
+      saveStats();
+      return interaction.reply({
+        content: `✅ +**${formatDuration(ms)}** (${minutos} min) a <@${target.id}>`,
+        ephemeral: true
+      });
     }
-    const target = interaction.options.getUser('usuario');
-    const minutos = interaction.options.getInteger('minutos');
-    const ms = minutos * 60 * 1000;
-    const userStats = getUserStats(target.id);
 
-    const before = userStats.totalHours || 0;
-    userStats.totalHours = Math.max(0, before - ms);
+    // ----- quitar-tiempo -----
+    if (commandName === 'quitar-tiempo') {
+      if (!canUsePermanentMessage(interaction.member)) {
+        return interaction.reply({ content: '❌ Solo el rol de **mensaje permanente** (o Admins).', ephemeral: true });
+      }
+      const target = interaction.options.getUser('usuario');
+      const minutos = interaction.options.getInteger('minutos');
+      const ms = minutos * 60 * 1000;
+      const userStats = getUserStats(target.id);
 
-    const weekKey = getWeekKey();
-    const monthKey = getMonthKey();
-    if (!userStats.weekly) userStats.weekly = {};
-    if (!userStats.monthly) userStats.monthly = {};
-    userStats.weekly[weekKey] = Math.max(0, (userStats.weekly[weekKey] || 0) - ms);
-    userStats.monthly[monthKey] = Math.max(0, (userStats.monthly[monthKey] || 0) - ms);
+      const before = userStats.totalHours || 0;
+      const removed = Math.min(ms, before);
+      userStats.totalHours = Math.max(0, before - ms);
 
-    if (!userStats.sessions) userStats.sessions = [];
-    userStats.sessions.push({
-      start: Date.now(),
-      end: Date.now(),
-      durationMs: -Math.min(ms, before),
-      agregado: true,
-      quitar: true
-    });
-    saveStats();
+      const weekKey = getWeekKey();
+      const monthKey = getMonthKey();
+      if (!userStats.weekly) userStats.weekly = {};
+      if (!userStats.monthly) userStats.monthly = {};
+      userStats.weekly[weekKey] = Math.max(0, (userStats.weekly[weekKey] || 0) - ms);
+      userStats.monthly[monthKey] = Math.max(0, (userStats.monthly[monthKey] || 0) - ms);
 
-    await interaction.reply({
-      content: `✅ −**${formatDuration(Math.min(ms, before))}** a <@${target.id}>\nAhora tiene: **${formatDuration(userStats.totalHours)}**`,
-      ephemeral: true
-    });
-  }
+      if (!userStats.sessions) userStats.sessions = [];
+      userStats.sessions.push({
+        start: Date.now(),
+        end: Date.now(),
+        durationMs: -removed,
+        agregado: true,
+        quitar: true
+      });
+      saveStats();
 
-  else if (commandName === 'agregar-rps-abiertos') {
-    if (!canUsePermanentMessage(interaction.member)) {
-      return interaction.reply({ content: '❌ Solo el rol de **mensaje permanente** (o Admins).', ephemeral: true });
+      return interaction.reply({
+        content: `✅ −**${formatDuration(removed)}** a <@${target.id}>\nAhora tiene: **${formatDuration(userStats.totalHours)}**`,
+        ephemeral: true
+      });
     }
-    const target = interaction.options.getUser('usuario');
-    const cantidad = interaction.options.getInteger('cantidad');
-    const userStats = getUserStats(target.id);
-    userStats.rpsOpened = (userStats.rpsOpened || 0) + cantidad;
-    saveStats();
-    await interaction.reply({ content: `✅ +**${cantidad}** RP(s) abierto(s) a <@${target.id}>`, ephemeral: true });
-  }
 
-  else if (commandName === 'agregar-rps-cerrados') {
-    if (!canUsePermanentMessage(interaction.member)) {
-      return interaction.reply({ content: '❌ Solo el rol de **mensaje permanente** (o Admins).', ephemeral: true });
+    // ----- agregar-rps-abiertos -----
+    if (commandName === 'agregar-rps-abiertos') {
+      if (!canUsePermanentMessage(interaction.member)) {
+        return interaction.reply({ content: '❌ Solo el rol de **mensaje permanente** (o Admins).', ephemeral: true });
+      }
+      const target = interaction.options.getUser('usuario');
+      const cantidad = interaction.options.getInteger('cantidad');
+      const userStats = getUserStats(target.id);
+      userStats.rpsOpened = (userStats.rpsOpened || 0) + cantidad;
+      saveStats();
+      return interaction.reply({ content: `✅ +**${cantidad}** RP(s) abierto(s) a <@${target.id}>`, ephemeral: true });
     }
-    const target = interaction.options.getUser('usuario');
-    const cantidad = interaction.options.getInteger('cantidad');
-    const userStats = getUserStats(target.id);
-    userStats.rpsFinished = (userStats.rpsFinished || 0) + cantidad;
-    saveStats();
-    await interaction.reply({ content: `✅ +**${cantidad}** RP(s) finalizado(s) a <@${target.id}>`, ephemeral: true });
-  }
 
-  else {
+    // ----- agregar-rps-cerrados -----
+    if (commandName === 'agregar-rps-cerrados') {
+      if (!canUsePermanentMessage(interaction.member)) {
+        return interaction.reply({ content: '❌ Solo el rol de **mensaje permanente** (o Admins).', ephemeral: true });
+      }
+      const target = interaction.options.getUser('usuario');
+      const cantidad = interaction.options.getInteger('cantidad');
+      const userStats = getUserStats(target.id);
+      userStats.rpsFinished = (userStats.rpsFinished || 0) + cantidad;
+      saveStats();
+      return interaction.reply({ content: `✅ +**${cantidad}** RP(s) finalizado(s) a <@${target.id}>`, ephemeral: true });
+    }
+
+    // ----- STATS / LEADERBOARDS -----
     if (!hasGeneralPermission(interaction.member)) {
       return interaction.reply({ content: '❌ Sin permiso.', ephemeral: true });
     }
@@ -906,8 +1189,11 @@ client.on('interactionCreate', async (interaction) => {
           if (sortKey === 'totalHours') value = s.totalHours || 0;
           else if (sortKey === 'rpsOpened') value = s.rpsOpened || 0;
           else if (sortKey === 'rpsFinished') value = s.rpsFinished || 0;
-          else if (sortKey === 'activeDays') value = s.activeDays ? (Array.isArray(s.activeDays) ? s.activeDays.length : s.activeDays.size) : 0;
-          else if (sortKey === 'weekly') value = s.weekly?.[getWeekKey()] || 0;
+          else if (sortKey === 'activeDays') {
+            value = s.activeDays
+              ? (Array.isArray(s.activeDays) ? s.activeDays.length : s.activeDays.size)
+              : 0;
+          } else if (sortKey === 'weekly') value = s.weekly?.[getWeekKey()] || 0;
           else if (sortKey === 'monthly') value = s.monthly?.[getMonthKey()] || 0;
           return { id, value };
         })
@@ -929,107 +1215,144 @@ client.on('interactionCreate', async (interaction) => {
     };
 
     if (commandName === 'rp-stats') {
-      const days = userStats.activeDays instanceof Set ? userStats.activeDays.size : (userStats.activeDays?.length || 0);
-      await interaction.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(PINK)
-          .setTitle(`📊 Estadísticas de ${target.username}`)
-          .setThumbnail(target.displayAvatarURL())
-          .addFields(
-            { name: '⏱️ Horas totales', value: formatDuration(userStats.totalHours || 0), inline: true },
-            { name: '🟢 RPs abiertos', value: `${userStats.rpsOpened || 0}`, inline: true },
-            { name: '🏁 RPs finalizados', value: `${userStats.rpsFinished || 0}`, inline: true },
-            { name: '📅 Días activos', value: `${days}`, inline: true },
-            { name: '📆 Esta semana', value: formatDuration(userStats.weekly?.[getWeekKey()] || 0), inline: true },
-            { name: '🗓️ Este mes', value: formatDuration(userStats.monthly?.[getMonthKey()] || 0), inline: true }
-          )
-          .setFooter({ text: 'Florida States RP • v2.2.0' })
-          .setTimestamp()]
+      const days = userStats.activeDays instanceof Set
+        ? userStats.activeDays.size
+        : (userStats.activeDays?.length || 0);
+
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(PINK)
+            .setTitle(`📊 Estadísticas de ${target.username}`)
+            .setThumbnail(target.displayAvatarURL())
+            .addFields(
+              { name: '⏱️ Horas totales', value: formatDuration(userStats.totalHours || 0), inline: true },
+              { name: '🟢 RPs abiertos', value: `${userStats.rpsOpened || 0}`, inline: true },
+              { name: '🏁 RPs finalizados', value: `${userStats.rpsFinished || 0}`, inline: true },
+              { name: '📅 Días activos', value: `${days}`, inline: true },
+              { name: '📆 Esta semana', value: formatDuration(userStats.weekly?.[getWeekKey()] || 0), inline: true },
+              { name: '🗓️ Este mes', value: formatDuration(userStats.monthly?.[getMonthKey()] || 0), inline: true }
+            )
+            .setFooter({ text: 'Florida States RP • v2.2.0' })
+            .setTimestamp()
+        ]
       });
     }
 
-    else if (commandName === 'horas-totales') {
+    if (commandName === 'horas-totales') {
       if (interaction.options.getUser('usuario')) {
-        await interaction.reply({
-          embeds: [new EmbedBuilder().setColor(PINK).setTitle(`⏱️ Horas totales de ${target.username}`)
-            .setDescription(`**${formatDuration(userStats.totalHours || 0)}**`).setThumbnail(target.displayAvatarURL())]
+        return interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(PINK)
+              .setTitle(`⏱️ Horas totales de ${target.username}`)
+              .setDescription(`**${formatDuration(userStats.totalHours || 0)}**`)
+              .setThumbnail(target.displayAvatarURL())
+          ]
         });
-      } else {
-        await interaction.reply({ embeds: [createLeaderboard('Horas Totales en RP', 'totalHours', formatDuration)] });
       }
+      return interaction.reply({ embeds: [createLeaderboard('Horas Totales en RP', 'totalHours', formatDuration)] });
     }
 
-    else if (commandName === 'rps-abiertos') {
+    if (commandName === 'rps-abiertos') {
       if (interaction.options.getUser('usuario')) {
-        await interaction.reply({
-          embeds: [new EmbedBuilder().setColor(PINK).setTitle(`🟢 RPs abiertos de ${target.username}`)
-            .setDescription(`**${userStats.rpsOpened || 0}**`)]
+        return interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(PINK)
+              .setTitle(`🟢 RPs abiertos de ${target.username}`)
+              .setDescription(`**${userStats.rpsOpened || 0}**`)
+          ]
         });
-      } else {
-        await interaction.reply({ embeds: [createLeaderboard('RPs Abiertos', 'rpsOpened', v => v)] });
       }
+      return interaction.reply({ embeds: [createLeaderboard('RPs Abiertos', 'rpsOpened', v => v)] });
     }
 
-    else if (commandName === 'rps-finalizados') {
+    if (commandName === 'rps-finalizados') {
       if (interaction.options.getUser('usuario')) {
-        await interaction.reply({
-          embeds: [new EmbedBuilder().setColor(PINK).setTitle(`🏁 RPs finalizados de ${target.username}`)
-            .setDescription(`**${userStats.rpsFinished || 0}**`)]
+        return interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(PINK)
+              .setTitle(`🏁 RPs finalizados de ${target.username}`)
+              .setDescription(`**${userStats.rpsFinished || 0}**`)
+          ]
         });
-      } else {
-        await interaction.reply({ embeds: [createLeaderboard('RPs Finalizados', 'rpsFinished', v => v)] });
       }
+      return interaction.reply({ embeds: [createLeaderboard('RPs Finalizados', 'rpsFinished', v => v)] });
     }
 
-    else if (commandName === 'dias-activos') {
-      const days = userStats.activeDays instanceof Set ? userStats.activeDays.size : (userStats.activeDays?.length || 0);
+    if (commandName === 'dias-activos') {
+      const days = userStats.activeDays instanceof Set
+        ? userStats.activeDays.size
+        : (userStats.activeDays?.length || 0);
       if (interaction.options.getUser('usuario')) {
-        await interaction.reply({
-          embeds: [new EmbedBuilder().setColor(PINK).setTitle(`📅 Días activos de ${target.username}`)
-            .setDescription(`**${days}** días`)]
+        return interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(PINK)
+              .setTitle(`📅 Días activos de ${target.username}`)
+              .setDescription(`**${days}** días`)
+          ]
         });
-      } else {
-        await interaction.reply({ embeds: [createLeaderboard('Días Activos en RP', 'activeDays', v => `${v} días`)] });
       }
+      return interaction.reply({ embeds: [createLeaderboard('Días Activos en RP', 'activeDays', v => `${v} días`)] });
     }
 
-    else if (commandName === 'actividad-semanal') {
+    if (commandName === 'actividad-semanal') {
       if (interaction.options.getUser('usuario')) {
-        await interaction.reply({
-          embeds: [new EmbedBuilder().setColor(PINK).setTitle(`📆 Actividad semanal de ${target.username}`)
-            .setDescription(`**${formatDuration(userStats.weekly?.[getWeekKey()] || 0)}**`)]
+        return interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(PINK)
+              .setTitle(`📆 Actividad semanal de ${target.username}`)
+              .setDescription(`**${formatDuration(userStats.weekly?.[getWeekKey()] || 0)}**`)
+          ]
         });
-      } else {
-        await interaction.reply({ embeds: [createLeaderboard('Actividad Semanal', 'weekly', formatDuration)] });
       }
+      return interaction.reply({ embeds: [createLeaderboard('Actividad Semanal', 'weekly', formatDuration)] });
     }
 
-    else if (commandName === 'actividad-mensual') {
+    if (commandName === 'actividad-mensual') {
       if (interaction.options.getUser('usuario')) {
-        await interaction.reply({
-          embeds: [new EmbedBuilder().setColor(PINK).setTitle(`🗓️ Actividad mensual de ${target.username}`)
-            .setDescription(`**${formatDuration(userStats.monthly?.[getMonthKey()] || 0)}**`)]
+        return interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(PINK)
+              .setTitle(`🗓️ Actividad mensual de ${target.username}`)
+              .setDescription(`**${formatDuration(userStats.monthly?.[getMonthKey()] || 0)}**`)
+          ]
         });
-      } else {
-        await interaction.reply({ embeds: [createLeaderboard('Actividad Mensual', 'monthly', formatDuration)] });
       }
+      return interaction.reply({ embeds: [createLeaderboard('Actividad Mensual', 'monthly', formatDuration)] });
     }
 
-    else if (commandName === 'duracion-sesiones') {
+    if (commandName === 'duracion-sesiones') {
       const sessions = (userStats.sessions || []).slice(-10).reverse();
       const desc = sessions.map((s, i) => {
         if (s.quitar) return `\`${i + 1}.\` −${formatDuration(Math.abs(s.durationMs))} — **quitado**`;
         if (s.agregado) return `\`${i + 1}.\` ${formatDuration(s.durationMs)} — **agregado**`;
-        return `\`${i + 1}.\` ${formatDuration(s.durationMs)} — <t:${Math.floor(s.start / 1000)}:d>`;
+        const start = s.start ? Math.floor(s.start / 1000) : Math.floor(Date.now() / 1000);
+        return `\`${i + 1}.\` ${formatDuration(s.durationMs)} — <t:${start}:d>`;
       }).join('\n') || 'Sin sesiones registradas.';
 
-      await interaction.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(PINK)
-          .setTitle(`📋 Últimas sesiones de ${target.username}`)
-          .setDescription(desc)
-          .setFooter({ text: 'Mostrando las últimas 10' })]
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(PINK)
+            .setTitle(`📋 Últimas sesiones de ${target.username}`)
+            .setDescription(desc)
+            .setFooter({ text: 'Mostrando las últimas 10' })
+        ]
       });
+    }
+
+  } catch (err) {
+    console.error('Error en interactionCreate:', err);
+    if (interaction.replied || interaction.deferred) {
+      try { await interaction.followUp({ content: '❌ Error interno.', ephemeral: true }); } catch (e) {}
+    } else {
+      try { await interaction.reply({ content: '❌ Error interno.', ephemeral: true }); } catch (e) {}
     }
   }
 });
