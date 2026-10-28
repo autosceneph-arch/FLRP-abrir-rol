@@ -74,6 +74,7 @@ const activeVotes = new Map();
 function saveState() {
   saveJSON(STATE_FILE, state);
 }
+
 function saveStats() {
   saveJSON(STATS_FILE, stats);
 }
@@ -178,7 +179,6 @@ async function sendActionDm(userId, text) {
 function seedInitialStats() {
   const weekKey = getWeekKey();
   const monthKey = getMonthKey();
-
   const SEED = {
     '1248999794417078349': {
       totalHours: 98040000, rpsOpened: 13, rpsFinished: 13,
@@ -317,22 +317,26 @@ async function sendDailyTopDm() {
   }
 }
 
-// ====================== EMBED ESTADO ======================
+// ====================== EMBED ESTADO (NEON) ======================
 const PINK = 0xFF69B4;
+const NEON_CYAN = 0x00F5FF;
+const NEON_MAGENTA = 0xFF00FF;
+const NEON_GREEN = 0x39FF14;
+const NEON_RED = 0xFF0040;
 
 function createStatusEmbed() {
   let statusText = '';
-  let color = PINK;
+  let color = NEON_CYAN;
 
   if (state.status === 'active') {
-    statusText = '🟢 **ROL ACTIVO**';
-    color = 0x00FF7F;
+    statusText = '⚡ **ROL ACTIVO** ⚡';
+    color = NEON_GREEN;
   } else if (state.status === 'frp') {
-    statusText = '⏸️ **FRP-FARMING ACTIVO**';
-    color = 0xFFA500;
+    statusText = '⏸️ **FRP-FARMING ACTIVO** ⏸️';
+    color = NEON_MAGENTA;
   } else {
-    statusText = '🔴 **ROL CERRADO**';
-    color = 0xFF0000;
+    statusText = '🔴 **ROL CERRADO** 🔴';
+    color = NEON_RED;
   }
 
   const viasDisplay = state.status === 'frp' ? '-' : (state.vias !== null && state.vias !== undefined ? state.vias : 'No definido');
@@ -347,29 +351,55 @@ function createStatusEmbed() {
 
   return new EmbedBuilder()
     .setColor(color)
-    .setTitle('🌸 Estado del Rol ・ Florida States RP')
+    .setAuthor({
+      name: 'FLORIDA STATES RP • ESTADO DEL ROL'
+    })
+    .setTitle('『 ⚡ ESTADO DEL ROL ⚡ 』')
     .setDescription(`\`\`\`\n${statusText}\n\`\`\``)
     .addFields(
-      { name: '🛣️ Vías', value: `\`${viasDisplay}\``, inline: true },
-      { name: '🏎️ Límite de Velocidad', value: `\`${limiteDisplay}\``, inline: true },
-      { name: '🔑 Código', value: `\`${state.codigo || 'No definido'}\``, inline: true },
-      { name: '⚡ Adelantamiento', value: `\`${adelantamientoDisplay}\``, inline: true },
-      { name: '🏴 Carteles', value: `\`${state.carteles || 'inactivos'}\``, inline: true },
-      { name: '🎉 Evento', value: `\`${state.evento || 'Sin eventos'}\``, inline: true },
-      { name: '👑 Host', value: hostDisplay, inline: true },
-      { name: '📅 Última actualización', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: false }
+      { name: '🛣️  Vías', value: `\`\`\`${viasDisplay}\`\`\``, inline: true },
+      { name: '🏎️  Límite de Velocidad', value: `\`\`\`${limiteDisplay}\`\`\``, inline: true },
+      { name: '🔑  Código', value: `\`\`\`${state.codigo || 'No definido'}\`\`\``, inline: true },
+      { name: '⚡  Adelantamiento', value: `\`\`\`${adelantamientoDisplay}\`\`\``, inline: true },
+      { name: '🏴  Carteles', value: `\`\`\`${state.carteles || 'inactivos'}\`\`\``, inline: true },
+      { name: '🎉  Evento', value: `\`\`\`${state.evento || 'Sin eventos'}\`\`\``, inline: true },
+      { name: '👑  Host', value: hostDisplay, inline: true },
+      { name: '\u200B', value: '\u200B', inline: true },
+      { name: '\u200B', value: '\u200B', inline: true },
+      { name: '📅  Última actualización', value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: false }
     )
-    .setFooter({ text: 'Florida States RP • v2.2.0' })
+    .setFooter({ text: 'Florida States RP  •  v2.2.0  •  Neon Edition' })
     .setTimestamp();
 }
 
 function createButtons() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('activar_rol').setLabel('Activar Rol').setStyle(ButtonStyle.Success).setEmoji('🟢'),
-    new ButtonBuilder().setCustomId('cerrar_rol').setLabel('Cerrar Rol').setStyle(ButtonStyle.Danger).setEmoji('🏁'),
-    new ButtonBuilder().setCustomId('activar_frp').setLabel('Activar FRP-Farming').setStyle(ButtonStyle.Primary).setEmoji('⏸️'),
-    new ButtonBuilder().setCustomId('desactivar_frp').setLabel('Desactivar FRP-Farming').setStyle(ButtonStyle.Secondary).setEmoji('▶️')
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('activar_rol')
+      .setLabel('Activar Rol')
+      .setStyle(ButtonStyle.Success)
+      .setEmoji('🟢'),
+    new ButtonBuilder()
+      .setCustomId('cerrar_rol')
+      .setLabel('Cerrar Rol')
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji('🏁')
   );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('activar_frp')
+      .setLabel('Activar FRP-Farming')
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji('⏸️'),
+    new ButtonBuilder()
+      .setCustomId('desactivar_frp')
+      .setLabel('Desactivar FRP-Farming')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji('▶️')
+  );
+
+  return [row1, row2];
 }
 
 // ====================== MENSAJES ======================
@@ -425,14 +455,14 @@ async function updatePermanentMessage(interaction = null) {
     const message = await channel.messages.fetch(state.messageId);
     await message.edit({
       embeds: [createStatusEmbed()],
-      components: [createButtons()]
+      components: createButtons()
     });
   } catch (err) {
     console.log('No se pudo editar el mensaje permanente...');
     if (interaction) {
       const newMsg = await interaction.channel.send({
         embeds: [createStatusEmbed()],
-        components: [createButtons()]
+        components: createButtons()
       });
       state.messageId = newMsg.id;
       state.channelId = interaction.channel.id;
@@ -458,16 +488,13 @@ async function handleButton(interaction) {
   switch (interaction.customId) {
     case 'activar_rol': {
       if (state.status === 'active') return confirm('⚠️ El rol ya está activo.');
-
       state.status = 'active';
       state.startedBy = userId;
       state.startTime = now;
       state.pausedAt = null;
       state.totalPausedMs = 0;
-
       userStats.rpsOpened = (userStats.rpsOpened || 0) + 1;
       userStats.activeDays.add(new Date().toISOString().slice(0, 10));
-
       saveState();
       saveStats();
       await updatePermanentMessage(interaction);
@@ -476,20 +503,16 @@ async function handleButton(interaction) {
       await confirm('🟢 **Rol activado** correctamente.');
       break;
     }
-
     case 'cerrar_rol': {
       if (state.status === 'closed') return confirm('⚠️ El rol ya está cerrado.');
-
       let duration = 0;
       if (state.startTime) {
         duration = now - state.startTime - (state.totalPausedMs || 0);
         if (state.pausedAt) duration -= (now - state.pausedAt);
         if (duration < 0) duration = 0;
       }
-
       const openerId = state.startedBy || userId;
       const openerStats = getUserStats(openerId);
-
       openerStats.totalHours = (openerStats.totalHours || 0) + duration;
       openerStats.rpsFinished = (openerStats.rpsFinished || 0) + 1;
       if (!openerStats.sessions) openerStats.sessions = [];
@@ -499,7 +522,6 @@ async function handleButton(interaction) {
         durationMs: duration,
         agregado: false
       });
-
       const weekKey = getWeekKey();
       const monthKey = getMonthKey();
       if (!openerStats.weekly) openerStats.weekly = {};
@@ -507,13 +529,11 @@ async function handleButton(interaction) {
       openerStats.weekly[weekKey] = (openerStats.weekly[weekKey] || 0) + duration;
       openerStats.monthly[monthKey] = (openerStats.monthly[monthKey] || 0) + duration;
       openerStats.activeDays = Array.from(openerStats.activeDays);
-
       state.status = 'closed';
       state.startedBy = null;
       state.startTime = null;
       state.pausedAt = null;
       state.totalPausedMs = 0;
-
       saveState();
       saveStats();
       await updatePermanentMessage(interaction);
@@ -525,17 +545,14 @@ async function handleButton(interaction) {
       await confirm(`🏁 **Rol cerrado**. Duración: **${formatDuration(duration)}**`);
       break;
     }
-
     case 'activar_frp': {
       if (state.status === 'frp') return confirm('⚠️ FRP-Farming ya está activo.');
-
       if (state.status === 'closed') {
         state.status = 'frp';
       } else {
         state.pausedAt = now;
         state.status = 'frp';
       }
-
       state.codigo = 'FLRP1';
       saveState();
       await updatePermanentMessage(interaction);
@@ -544,10 +561,8 @@ async function handleButton(interaction) {
       await confirm('⏸️ **FRP-Farming activado**. Código → **FLRP1**');
       break;
     }
-
     case 'desactivar_frp': {
       if (state.status !== 'frp') return confirm('⚠️ FRP-Farming no está activo.');
-
       if (state.pausedAt && state.startTime) {
         state.totalPausedMs = (state.totalPausedMs || 0) + (now - state.pausedAt);
         state.pausedAt = null;
@@ -555,7 +570,6 @@ async function handleButton(interaction) {
       } else {
         state.status = 'closed';
       }
-
       saveState();
       await updatePermanentMessage(interaction);
       await sendTempMessage(interaction.channel, getDesactivarFrpMsg(userId));
@@ -571,7 +585,6 @@ const commands = [
   new SlashCommandBuilder()
     .setName('mensaje-permanente')
     .setDescription('Coloca el mensaje permanente de estado del rol en este canal'),
-
   new SlashCommandBuilder()
     .setName('config-roles')
     .setDescription('Configura roles de permisos y usuario del DM diario')
@@ -596,7 +609,6 @@ const commands = [
         .setRequired(false)
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
   new SlashCommandBuilder()
     .setName('vias')
     .setDescription('Configura el número de vías (1 o 2)')
@@ -607,7 +619,6 @@ const commands = [
         .setMinValue(1)
         .setMaxValue(2)
     ),
-
   new SlashCommandBuilder()
     .setName('limite')
     .setDescription('Configura el límite de velocidad')
@@ -617,7 +628,6 @@ const commands = [
         .setRequired(true)
         .setMinValue(1)
     ),
-
   new SlashCommandBuilder()
     .setName('codigo')
     .setDescription('Configura el código del servidor')
@@ -626,7 +636,6 @@ const commands = [
         .setDescription('Código del servidor')
         .setRequired(true)
     ),
-
   new SlashCommandBuilder()
     .setName('adelantamiento')
     .setDescription('Configura el adelantamiento (0 = no, o entre 80 y 200)')
@@ -637,7 +646,6 @@ const commands = [
         .setMinValue(0)
         .setMaxValue(200)
     ),
-
   new SlashCommandBuilder()
     .setName('carteles')
     .setDescription('Configura el estado de los carteles')
@@ -650,7 +658,6 @@ const commands = [
           { name: 'Inactivos', value: 'inactivos' }
         )
     ),
-
   new SlashCommandBuilder()
     .setName('evento')
     .setDescription('Activa un evento en el mensaje permanente')
@@ -659,11 +666,9 @@ const commands = [
         .setDescription('Nombre del evento')
         .setRequired(true)
     ),
-
   new SlashCommandBuilder()
     .setName('terminar-evento')
     .setDescription('Termina el evento actual'),
-
   new SlashCommandBuilder()
     .setName('votacion')
     .setDescription('Inicia una votación para abrir rol')
@@ -673,7 +678,6 @@ const commands = [
         .setRequired(true)
         .setMinValue(1)
     ),
-
   new SlashCommandBuilder()
     .setName('agregar-dias')
     .setDescription('Agrega días activos a un usuario (solo rol permanente)')
@@ -688,7 +692,6 @@ const commands = [
         .setRequired(true)
         .setMinValue(1)
     ),
-
   new SlashCommandBuilder()
     .setName('agregar-tiempo')
     .setDescription('Agrega tiempo en minutos a un usuario (solo rol permanente)')
@@ -703,7 +706,6 @@ const commands = [
         .setRequired(true)
         .setMinValue(1)
     ),
-
   new SlashCommandBuilder()
     .setName('quitar-tiempo')
     .setDescription('Quita tiempo en minutos a un usuario (solo rol permanente)')
@@ -718,7 +720,6 @@ const commands = [
         .setRequired(true)
         .setMinValue(1)
     ),
-
   new SlashCommandBuilder()
     .setName('agregar-rps-abiertos')
     .setDescription('Agrega RPs abiertos a un usuario (solo rol permanente)')
@@ -733,7 +734,6 @@ const commands = [
         .setRequired(true)
         .setMinValue(1)
     ),
-
   new SlashCommandBuilder()
     .setName('agregar-rps-cerrados')
     .setDescription('Agrega RPs finalizados a un usuario (solo rol permanente)')
@@ -748,7 +748,6 @@ const commands = [
         .setRequired(true)
         .setMinValue(1)
     ),
-
   new SlashCommandBuilder()
     .setName('rp-stats')
     .setDescription('Ver estadísticas de RP de un usuario')
@@ -757,7 +756,6 @@ const commands = [
         .setDescription('Usuario a consultar (opcional)')
         .setRequired(false)
     ),
-
   new SlashCommandBuilder()
     .setName('horas-totales')
     .setDescription('Leaderboard de horas totales en RP')
@@ -766,7 +764,6 @@ const commands = [
         .setDescription('Ver de un usuario específico (opcional)')
         .setRequired(false)
     ),
-
   new SlashCommandBuilder()
     .setName('rps-abiertos')
     .setDescription('Leaderboard de RPs abiertos')
@@ -775,7 +772,6 @@ const commands = [
         .setDescription('Ver de un usuario específico (opcional)')
         .setRequired(false)
     ),
-
   new SlashCommandBuilder()
     .setName('rps-finalizados')
     .setDescription('Leaderboard de RPs finalizados')
@@ -784,7 +780,6 @@ const commands = [
         .setDescription('Ver de un usuario específico (opcional)')
         .setRequired(false)
     ),
-
   new SlashCommandBuilder()
     .setName('dias-activos')
     .setDescription('Leaderboard de días activos en RP')
@@ -793,7 +788,6 @@ const commands = [
         .setDescription('Ver de un usuario específico (opcional)')
         .setRequired(false)
     ),
-
   new SlashCommandBuilder()
     .setName('actividad-semanal')
     .setDescription('Leaderboard de actividad semanal')
@@ -802,7 +796,6 @@ const commands = [
         .setDescription('Ver de un usuario específico (opcional)')
         .setRequired(false)
     ),
-
   new SlashCommandBuilder()
     .setName('actividad-mensual')
     .setDescription('Leaderboard de actividad mensual')
@@ -811,7 +804,6 @@ const commands = [
         .setDescription('Ver de un usuario específico (opcional)')
         .setRequired(false)
     ),
-
   new SlashCommandBuilder()
     .setName('duracion-sesiones')
     .setDescription('Ver últimas sesiones de un usuario')
@@ -824,7 +816,7 @@ const commands = [
 
 // ====================== READY ======================
 client.once('ready', async () => {
-  console.log(`🌸 Bot listo como ${client.user.tag} | v2.2.0`);
+  console.log(`🌸 Bot listo como ${client.user.tag} | v2.2.0 Neon`);
   seedInitialStats();
 
   if (!process.env.TOKEN || !process.env.CLIENT_ID || !process.env.GUILD_ID) {
@@ -874,10 +866,8 @@ client.on('messageReactionAdd', async (reaction, user) => {
   if (reaction.partial) {
     try { await reaction.fetch(); } catch { return; }
   }
-
   const message = reaction.message;
   if (!activeVotes.has(message.id)) return;
-
   const voteData = activeVotes.get(message.id);
   if (voteData.reached) return;
   if (reaction.emoji.name !== '✅') return;
@@ -908,7 +898,7 @@ client.on('interactionCreate', async (interaction) => {
       }
       const msg = await interaction.channel.send({
         embeds: [createStatusEmbed()],
-        components: [createButtons()]
+        components: createButtons()
       });
       state.messageId = msg.id;
       state.channelId = interaction.channel.id;
@@ -933,7 +923,6 @@ client.on('interactionCreate', async (interaction) => {
         state.allowedRoles.splice(idx, 1);
         response += `🗑️ Rol general **${role.name}** eliminado.\n`;
       }
-
       if (permanentRole) {
         state.permanentMessageRole = permanentRole.id;
         response += `🔒 Rol permanente: **${permanentRole.name}**\n`;
@@ -946,7 +935,6 @@ client.on('interactionCreate', async (interaction) => {
         state.dmUserId = dmUser.id;
         response += `📩 DM diario: **${dmUser.tag}** (a las ${DAILY_DM_HOUR}:00)`;
       }
-
       saveState();
       return interaction.reply({ content: response || 'Sin cambios.', ephemeral: true });
     }
@@ -1049,7 +1037,6 @@ client.on('interactionCreate', async (interaction) => {
 **Votos requeridos:** \`${numero}\`
 **Votación iniciada por:** ${iniciador}
 @everyone`;
-
       const voteMsg = await interaction.channel.send({ content: voteContent });
       await voteMsg.react('✅');
       activeVotes.set(voteMsg.id, {
@@ -1086,7 +1073,6 @@ client.on('interactionCreate', async (interaction) => {
       const minutos = interaction.options.getInteger('minutos');
       const ms = minutos * 60 * 1000;
       const userStats = getUserStats(target.id);
-
       userStats.totalHours = (userStats.totalHours || 0) + ms;
       const weekKey = getWeekKey();
       const monthKey = getMonthKey();
@@ -1117,18 +1103,15 @@ client.on('interactionCreate', async (interaction) => {
       const minutos = interaction.options.getInteger('minutos');
       const ms = minutos * 60 * 1000;
       const userStats = getUserStats(target.id);
-
       const before = userStats.totalHours || 0;
       const removed = Math.min(ms, before);
       userStats.totalHours = Math.max(0, before - ms);
-
       const weekKey = getWeekKey();
       const monthKey = getMonthKey();
       if (!userStats.weekly) userStats.weekly = {};
       if (!userStats.monthly) userStats.monthly = {};
       userStats.weekly[weekKey] = Math.max(0, (userStats.weekly[weekKey] || 0) - ms);
       userStats.monthly[monthKey] = Math.max(0, (userStats.monthly[monthKey] || 0) - ms);
-
       if (!userStats.sessions) userStats.sessions = [];
       userStats.sessions.push({
         start: Date.now(),
@@ -1138,7 +1121,6 @@ client.on('interactionCreate', async (interaction) => {
         quitar: true
       });
       saveStats();
-
       return interaction.reply({
         content: `✅ −**${formatDuration(removed)}** a <@${target.id}>\nAhora tiene: **${formatDuration(userStats.totalHours)}**`,
         ephemeral: true
@@ -1178,6 +1160,7 @@ client.on('interactionCreate', async (interaction) => {
 
     const target = interaction.options.getUser('usuario') || interaction.user;
     const userStats = getUserStats(target.id);
+
     if (!(userStats.activeDays instanceof Set)) {
       userStats.activeDays = new Set(userStats.activeDays || []);
     }
@@ -1218,7 +1201,6 @@ client.on('interactionCreate', async (interaction) => {
       const days = userStats.activeDays instanceof Set
         ? userStats.activeDays.size
         : (userStats.activeDays?.length || 0);
-
       return interaction.reply({
         embeds: [
           new EmbedBuilder()
@@ -1335,7 +1317,6 @@ client.on('interactionCreate', async (interaction) => {
         const start = s.start ? Math.floor(s.start / 1000) : Math.floor(Date.now() / 1000);
         return `\`${i + 1}.\` ${formatDuration(s.durationMs)} — <t:${start}:d>`;
       }).join('\n') || 'Sin sesiones registradas.';
-
       return interaction.reply({
         embeds: [
           new EmbedBuilder()
